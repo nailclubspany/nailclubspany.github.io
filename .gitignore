@@ -1,0 +1,5 @@
+# Local-only: planning docs, Superpowers scratch, Claude notes
+.superpowers/
+docs/
+claude.md
+CLAUDE.md
