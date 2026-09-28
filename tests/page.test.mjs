@@ -41,6 +41,24 @@ test('all services and bundles are listed', () => {
   }
 });
 
+test('package deals match the salon sign and the featured offer links to them', () => {
+  const deals = html.match(/<details id="bundles"[^>]*>([\s\S]*?)<\/details>/);
+  assert.ok(deals, 'missing <details id="bundles">');
+  const rows = [...deals[1].matchAll(/<li><span>([^<]+)<\/span><b>([^<]+)<\/b><\/li>/g)].map(([, n, p]) => `${n} ${p}`);
+  assert.deepEqual(rows, [
+    'Powder Mani + Pedi + 15 min Massage $85',
+    'Powder Mani + Pedi + Callus + 15 min Massage $95',
+    'Gel Mani + Reg Pedi $60',
+    'Gel Mani + Reg Pedi + 10 min Massage $70',
+    'Gel Mani + Reg Pedi + Callus + 10 min Massage $80',
+    'Reg Mani + Reg Pedi $38',
+    'Reg Mani + Reg Pedi + 30 min Massage $72',
+    'Reg Mani + Reg Pedi + Callus + 30 min Massage $82',
+  ]);
+  const offer = html.match(/<section class="offer"[\s\S]*?<\/section>/)[0];
+  assert.ok(offer.includes('href="#bundles"'), 'featured offer links to the package deals');
+});
+
 function luminance(hex) {
   const [r, g, b] = hex.match(/[0-9a-f]{2}/gi).map((h) => {
     const c = parseInt(h, 16) / 255;
@@ -145,7 +163,7 @@ test('price list: every category, sample prices, nav link, and the original menu
   const section = html.match(/<section id="prices"[\s\S]*?<\/section>/);
   assert.ok(section, 'missing <section id="prices">');
   const s = section[0];
-  for (const cat of ['Manicure', 'Pedicure', 'Spa Pedicure', 'Waxing', 'Eyelash Extensions', 'Massage', 'Facial']) {
+  for (const cat of ['Package Deals', 'Manicure', 'Pedicure', 'Spa Pedicure', 'Waxing', 'Eyelash Extensions', 'Massage', 'Facial']) {
     assert.match(s, new RegExp(`<summary>${cat}</summary>`), `missing category ${cat}`);
   }
   for (const [item, price] of [
