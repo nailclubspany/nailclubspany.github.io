@@ -59,6 +59,16 @@ test('package deals match the salon sign and the featured offer links to them', 
   assert.ok(offer.includes('href="#bundles"'), 'featured offer links to the package deals');
 });
 
+test('short links /prices/ and /book/ redirect to their section and keep the utm tag', () => {
+  for (const [dir, id] of [['prices', 'prices'], ['book', 'book']]) {
+    const page = readFileSync(new URL(`../${dir}/index.html`, import.meta.url), 'utf8');
+    assert.ok(html.includes(`id="${id}"`), `homepage has #${id}`);
+    assert.ok(page.includes(`location.replace('/' + location.search + '#${id}')`), `${dir}/ keeps the query`);
+    assert.ok(page.includes(`url=/#${id}"`), `${dir}/ has a no-JS fallback`);
+    assert.ok(page.includes('noindex'));
+  }
+});
+
 function luminance(hex) {
   const [r, g, b] = hex.match(/[0-9a-f]{2}/gi).map((h) => {
     const c = parseInt(h, 16) / 255;
