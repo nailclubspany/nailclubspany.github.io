@@ -44,16 +44,21 @@ test('all services and bundles are listed', () => {
 test('package deals match the salon sign and the featured offer links to them', () => {
   const deals = html.match(/<details id="bundles"[^>]*>([\s\S]*?)<\/details>/);
   assert.ok(deals, 'missing <details id="bundles">');
-  const rows = [...deals[1].matchAll(/<li><span>([^<]+)<\/span><b>([^<]+)<\/b><\/li>/g)].map(([, n, p]) => `${n} ${p}`);
+  // Each combo's own price (if it has one) sits in its heading; add-ons are listed under it.
+  const rows = [...deals[1].matchAll(/<div class="deal-group">\s*<h3><span>([^<]+)<\/span>(?:<b>([^<]+)<\/b>)?<\/h3>([\s\S]*?)<\/div>/g)]
+    .flatMap(([, combo, price, list]) => [
+      ...(price ? [`${combo} ${price}`] : []),
+      ...[...list.matchAll(/<li><span>([^<]+)<\/span><b>([^<]+)<\/b><\/li>/g)].map(([, extra, p]) => `${combo} | ${extra} ${p}`),
+    ]);
   assert.deepEqual(rows, [
-    'Powder Mani + Pedi + 15 min Massage $85',
-    'Powder Mani + Pedi + Callus + 15 min Massage $95',
-    'Gel Mani + Reg Pedi $60',
-    'Gel Mani + Reg Pedi + 10 min Massage $70',
-    'Gel Mani + Reg Pedi + Callus + 10 min Massage $80',
     'Reg Mani + Reg Pedi $38',
-    'Reg Mani + Reg Pedi + 30 min Massage $72',
-    'Reg Mani + Reg Pedi + Callus + 30 min Massage $82',
+    'Reg Mani + Reg Pedi | + 30 min Massage $72',
+    'Reg Mani + Reg Pedi | + Callus + 30 min Massage $82',
+    'Gel Mani + Reg Pedi $60',
+    'Gel Mani + Reg Pedi | + 10 min Massage $70',
+    'Gel Mani + Reg Pedi | + Callus + 10 min Massage $80',
+    'Powder Mani + Reg Pedi | + 15 min Massage $85',
+    'Powder Mani + Reg Pedi | + Callus + 15 min Massage $95',
   ]);
   const offer = html.match(/<section class="offer"[\s\S]*?<\/section>/)[0];
   assert.ok(offer.includes('href="#bundles"'), 'featured offer links to the package deals');
@@ -67,6 +72,13 @@ test('short links /prices/ and /book/ redirect to their section and keep the utm
     assert.ok(page.includes(`url=/#${id}"`), `${dir}/ has a no-JS fallback`);
     assert.ok(page.includes('noindex'));
   }
+});
+
+test('/ig/ short link lands on the homepage tagged as Instagram', () => {
+  const page = readFileSync(new URL('../ig/index.html', import.meta.url), 'utf8');
+  assert.ok(page.includes(`location.replace('/?utm_source=instagram')`));
+  assert.ok(page.includes('url=/?utm_source=instagram"'), 'no-JS fallback');
+  assert.ok(page.includes('noindex'));
 });
 
 function luminance(hex) {
