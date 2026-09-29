@@ -35,7 +35,8 @@ test('required booking fields are required; notes is optional', () => {
 });
 
 test('all services and bundles are listed', () => {
-  for (const s of ['Nails', 'Massage', 'Head Spa', 'Eyelash Extensions', 'Facials', 'Waxing',
+  assert.match(html, /id="nail-services"/, 'nail picker host');
+  for (const s of ['Massage', 'Head Spa', 'Eyelash Extensions', 'Facials', 'Waxing',
                    'Regular Mani + Pedi', '$38']) {
     assert.ok(html.includes(s), `missing "${s}"`);
   }
@@ -157,6 +158,17 @@ test('technician dropdown is optional and offers No preference, Mia, Yoyo, Carme
   assert.deepEqual(options, ['|No preference', 'Mia|Mia', 'Yoyo|Yoyo', 'Carmela|Carmela', 'Lili|Lili', 'Linda|Linda']);
 });
 
+test('booking script is a module loaded from js/booking.mjs', () => {
+  assert.ok(html.includes('<script type="module" src="js/booking.mjs"></script>'));
+  assert.ok(existsSync(new URL('../js/booking.mjs', import.meta.url)), 'js/booking.mjs must exist');
+});
+
+test('config ships with live booking off', () => {
+  const config = readFileSync(new URL('../js/config.mjs', import.meta.url), 'utf8');
+  assert.match(config, /export const SUPABASE_URL = '';/);
+  assert.match(config, /export const SUPABASE_ANON_KEY = '';/);
+});
+
 test('booking form has a required email field', () => {
   const email = field('email');
   assert.match(email, /type="email"/);
@@ -174,9 +186,14 @@ test('hero shows a large logo beside the name', () => {
 test('services are checkboxes, one per service, none individually required', () => {
   const boxes = [...html.matchAll(/<input type="checkbox" name="service" value="([^"]+)"[^>]*>/g)];
   assert.deepEqual(boxes.map((m) => m[1]), [
-    'Nails', 'Massage', 'Head Spa', 'Eyelash Extensions', 'Facials', 'Waxing',
+    'Head Spa', 'Eyelash Extensions', 'Facials', 'Waxing',
     '$38 Bundle: Regular Mani + Pedi', 'Other',
   ]);
+  // Nail services render from js/services.mjs into #nail-services, and
+  // Massage (with its type and duration) into #spa-services; the old
+  // catch-all Nails box is gone.
+  assert.match(html, /id="spa-services"/);
+  assert.doesNotMatch(html, /value="Nails"/);
   for (const [tag] of boxes) assert.doesNotMatch(tag, /\srequired/);
   assert.doesNotMatch(html, /<select[^>]*name="service"/);
 });
@@ -189,7 +206,7 @@ test('price list: every category, sample prices, nav link, and the original menu
     assert.match(s, new RegExp(`<summary>${cat}</summary>`), `missing category ${cat}`);
   }
   for (const [item, price] of [
-    ['Manicure', '$15'], ['Gel-X Extension', '$70'], ['UV Gel French', '+$15'], ['Gel Pedi', '$45'],
+    ['Manicure', '$15'], ['Gel-X Extension', '$70'], ['UV Gel/Hard Gel French', '+$15'], ['Gel Pedi', '$45'],
     ['Gold Mystique', '$80'], ['Bikini', '$25'], ['Signature Deep Clean Facial', '$85'],
   ]) {
     assert.ok(s.includes(`<span>${item}</span><b>${price}</b>`), `${item} ${price}`);
@@ -204,4 +221,21 @@ test('price list: every category, sample prices, nav link, and the original menu
     assert.ok(s.includes(`href="photos/menu-${n}.png"`), `link to menu-${n}`);
     assert.ok(existsSync(new URL(`../photos/menu-${n}.png`, import.meta.url)), `missing photos/menu-${n}.png`);
   }
+});
+
+test('booking form never falls back to a GET (no PII in the URL)', () => {
+  const form = html.match(/<form id="booking-form"[^>]*>/);
+  assert.ok(form, 'booking form exists');
+  assert.match(form[0], /\smethod="post"/);
+  assert.match(form[0], /\saction="#"/);
+  assert.match(form[0], /\snovalidate/);
+});
+
+test('booking inputs carry length caps matching the server', () => {
+  assert.match(field('name'), /\smaxlength="100"/);
+  assert.match(field('phone'), /\smaxlength="30"/);
+  assert.match(field('email'), /\smaxlength="254"/);
+  // 500, not the server's 1000: the rest is room for the nail service
+  // details js/services.mjs puts in front of the customer's notes.
+  assert.match(field('notes'), /\smaxlength="500"/);
 });

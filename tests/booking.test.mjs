@@ -91,6 +91,18 @@ test('web submission fills blanks with No preference and (none)', () => {
   assert.equal(payload.notes, '(none)');
 });
 
+test('default submission unchanged', () => {
+  const payload = JSON.parse(JSON.stringify(buildBookingSubmission(sample, 'KEY-123')));
+  assert.equal(payload.subject, 'Appointment request – Ann & Bo');
+  assert.equal(payload.status, undefined);
+});
+
+test('held submission marks subject and status', () => {
+  const payload = buildBookingSubmission(sample, 'KEY-123', true);
+  assert.equal(payload.subject, 'Appointment request (held) – Ann & Bo');
+  assert.equal(payload.status, 'Held online — confirm in the staff app');
+});
+
 test('localISODate uses local time, not UTC', () => {
   assert.equal(localISODate(new Date(2026, 8, 25, 23, 30)), '2026-09-25');
 });

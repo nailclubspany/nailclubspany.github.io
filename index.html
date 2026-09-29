@@ -132,18 +132,34 @@
   @media (min-width: 860px) { .book-grid { grid-template-columns: 1fr 1.3fr; } }
   .book-aside p { margin: 18px 0 0; color: #bdbdbd; }
   .book-aside a { color: #fff; }
-  form { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  form { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .full { grid-column: 1 / -1; }
-  label { display: grid; gap: 6px; font-size: 13px; color: #d4d4d4; min-width: 0; }
-  input, select, textarea { width: 100%; min-width: 0; font: 16px/1.4 var(--body); color: var(--ink); background: #fff; border: 1.5px solid transparent; border-radius: 10px; padding: 12px 14px; min-height: 48px; }
+  label { display: grid; gap: 4px; font-size: 13px; color: #d4d4d4; min-width: 0; }
+  input, select, textarea { width: 100%; min-width: 0; font: 16px/1.4 var(--body); color: var(--ink); background: #fff; border: 1.5px solid transparent; border-radius: 8px; padding: 7px 12px; min-height: 40px; }
   /* iOS Safari gives date/time inputs a built-in minimum width that can push the page sideways */
   input[type="date"], input[type="time"] { -webkit-appearance: none; appearance: none; display: block; }
   input::-webkit-date-and-time-value { text-align: left; }
-  textarea { min-height: 96px; resize: vertical; }
+  textarea { min-height: 64px; resize: vertical; }
   .services-pick { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 16px; }
   .services-pick legend { font-size: 13px; color: #d4d4d4; padding: 0; margin-bottom: 8px; }
   .services-pick label { display: flex; align-items: center; gap: 10px; font-size: 15px; color: #fff; cursor: pointer; min-height: 32px; }
   .services-pick input { width: 20px; height: 20px; min-height: 0; padding: 0; margin: 0; flex: none; accent-color: var(--accent); }
+  .services-pick .group-label { margin: 6px 0 0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #b8c6d6; }
+  .nail-services { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 16px; }
+  .nail-services .group-label { grid-column: 1 / -1; margin: 0; }
+  .spa-services { display: contents; }  /* Massage sits in the Spa & more grid like the plain boxes */
+  .nail-item { min-width: 0; }
+  .nail-item.open { grid-column: 1 / -1; }
+  .nail-details { border: 0; border-left: 2px solid var(--accent); margin: 6px 0 4px 9px; padding: 4px 0 4px 18px; min-width: 0; display: grid; gap: 12px; }
+  .nail-details[hidden] { display: none; }
+  .nail-details .choice { border: 0; margin: 0; padding: 0; min-width: 0; }
+  .nail-details .choice-label { padding: 0; margin: 0 0 6px; font-size: 13px; color: #d4d4d4; }
+  .nail-details .pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .services-pick .nail-details .pills label { position: relative; min-height: 36px; padding: 6px 14px; border: 1.5px solid #4a4a4a; border-radius: 999px; font-size: 14px; gap: 0; }
+  .services-pick .nail-details .pills input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .services-pick .nail-details .pills label:has(input:checked) { background: var(--accent-dark); border-color: var(--accent); color: #fff; }
+  .services-pick .nail-details .pills label:has(input:focus-visible) { box-shadow: 0 0 0 3px rgba(126,147,171,.35); }
+  .nail-details .addons label { min-height: 28px; font-size: 14px; }
   input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(126,147,171,.35); }
   .book .btn-primary { background: var(--accent); border-color: var(--accent); width: 100%; }
   .book .btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
@@ -301,11 +317,11 @@
               <li><span>Paraffin Mani</span><b>$25</b></li>
               <li><span>Spa Mani</span><b>$40</b></li>
               <li><span>Spa Mani Gel</span><b>$55</b></li>
-              <li><span>UV Gel New Set</span><b>$80</b></li>
-              <li><span>UV Gel New Set w/ Tip</span><b>$90</b></li>
-              <li><span>UV Gel Fill In</span><b>$60</b></li>
-              <li><span>UV Gel Regular Polish</span><b>$50</b></li>
-              <li><span>UV Gel French</span><b>+$15</b></li>
+              <li><span>UV Gel/Hard Gel New Set</span><b>$80</b></li>
+              <li><span>UV Gel/Hard Gel New Set w/ Tip</span><b>$90</b></li>
+              <li><span>UV Gel/Hard Gel Fill In</span><b>$60</b></li>
+              <li><span>UV Gel/Hard Gel Regular Polish</span><b>$50</b></li>
+              <li><span>UV Gel/Hard Gel French</span><b>+$15</b></li>
               <li><span>Gel-X Extension</span><b>$70</b></li>
               <li><span>Buff &amp; Shine</span><b>$23</b></li>
             </ul>
@@ -428,14 +444,17 @@
         <p>Walk-ins are always welcome.</p>
         <p>Prefer to call? <a href="tel:+17183928899">(718) 392-8899</a></p>
       </div>
-      <form id="booking-form" novalidate>
-        <label>Name<input name="name" type="text" autocomplete="name" required></label>
-        <label>Phone<input name="phone" type="tel" autocomplete="tel" required></label>
-        <label class="full">Email<input name="email" type="email" autocomplete="email" required></label>
+      <form id="booking-form" method="post" action="#" novalidate>
+        <label>Name<input name="name" type="text" autocomplete="name" maxlength="100" required></label>
+        <label>Phone<input name="phone" type="tel" autocomplete="tel" maxlength="30" required></label>
+        <label class="full">Email<input name="email" type="email" autocomplete="email" maxlength="254" required></label>
         <fieldset class="full services-pick">
           <legend>Services (choose one or more)</legend>
-          <label><input type="checkbox" name="service" value="Nails"> Nails</label>
-          <label><input type="checkbox" name="service" value="Massage"> Massage</label>
+          <!-- NAIL SERVICES: rendered from js/services.mjs (edit the menu there) -->
+          <div id="nail-services" class="full nail-services"><p class="group-label">Nails</p></div>
+          <p class="group-label full">Spa &amp; more</p>
+          <!-- MASSAGE: rendered from js/services.mjs (SPA_SERVICES) so it can ask type and duration -->
+          <div id="spa-services" class="spa-services"></div>
           <label><input type="checkbox" name="service" value="Head Spa"> Head Spa</label>
           <label><input type="checkbox" name="service" value="Eyelash Extensions"> Eyelash Extensions</label>
           <label><input type="checkbox" name="service" value="Facials"> Facials</label>
@@ -443,8 +462,8 @@
           <label class="full"><input type="checkbox" name="service" value="$38 Bundle: Regular Mani + Pedi"> $38 Bundle: Regular Mani + Pedi</label>
           <label><input type="checkbox" name="service" value="Other"> Other</label>
         </fieldset>
-        <!-- TECHNICIANS: add or remove <option> lines as staff change -->
-        <label class="full">Nail technician (optional)
+        <!-- TECHNICIANS: static fallback for legacy mode; js/booking.mjs replaces these with live staff when configured -->
+        <label class="full">Provider (optional)
           <select name="technician">
             <option value="">No preference</option>
             <option>Mia</option>
@@ -460,7 +479,7 @@
             <option value="">Choose a time…</option>
           </select>
         </label>
-        <label class="full">Notes (optional)<textarea name="notes" placeholder="Anything we should know?"></textarea></label>
+        <label class="full">Notes (optional)<textarea name="notes" maxlength="500" placeholder="Anything we should know?"></textarea></label>
         <input type="checkbox" name="botcheck" tabindex="-1" autocomplete="off" aria-hidden="true" style="display:none">
         <div class="full"><button class="btn btn-primary" type="submit">Send request</button></div>
         <p id="booking-status" class="full" role="status" aria-live="polite"></p>
@@ -546,10 +565,12 @@
   }
 
   // JSON payload for Web3Forms, which emails it to the inbox that owns the access key.
-  function buildBookingSubmission(data, accessKey) {
-    return {
+  // `held` marks a request that was already booked live (server-side hold) rather than
+  // merely requested — the subject and an extra status field flag it for staff.
+  function buildBookingSubmission(data, accessKey, held = false) {
+    const payload = {
       access_key: accessKey,
-      subject: `Appointment request – ${data.name}`,
+      subject: held ? `Appointment request (held) – ${data.name}` : `Appointment request – ${data.name}`,
       from_name: 'Nail Club Spa NY',
       name: data.name,
       phone: data.phone,
@@ -560,6 +581,8 @@
       'preferred time': data.time,
       notes: data.notes ? data.notes : '(none)',
     };
+    if (held) payload.status = 'Held online — confirm in the staff app';
+    return payload;
   }
 
   // Opening hours in minutes after midnight, keyed by day (0 = Sunday). Keep in sync with the Hours table.
@@ -607,16 +630,6 @@
   }
 </script>
 <script>
-  const SALON_EMAIL = 'nailclubspany@gmail.com'; // keep in sync with Contact section
-  // Web3Forms access key for SALON_EMAIL (get one free at web3forms.com). Until it's set, the form falls back to mailto.
-  const WEB3FORMS_KEY = '257c0065-a5ef-40a0-a5ba-0b4922f98284';
-
-  const form = document.getElementById('booking-form');
-  const status = document.getElementById('booking-status');
-  const dateInput = form.elements.date;
-
-  dateInput.min = localISODate(new Date());
-
   function refreshHours() {
     const now = new Date();
     const text = openStatus(now);
@@ -642,76 +655,8 @@
   }));
   addEventListener('hashchange', openLinkedCategory);
   openLinkedCategory();
-
-  // Time options follow the chosen date's hours (Mon–Sat until no date is picked); keeps the pick if still offered.
-  const timeSelect = form.elements.time;
-  function fillTimes() {
-    const picked = timeSelect.value;
-    const slots = timeSlots(dateInput.value ? weekdayOf(dateInput.value) : 1);
-    timeSelect.replaceChildren(new Option('Choose a time…', ''), ...slots.map((t) => new Option(t)));
-    if (slots.includes(picked)) timeSelect.value = picked;
-  }
-  fillTimes();
-
-  dateInput.addEventListener('input', () => { dateInput.setCustomValidity(''); fillTimes(); });
-
-  // At least one service must be ticked; the browser reports it on the first box.
-  const serviceBoxes = [...form.querySelectorAll('input[name="service"]')];
-  const pickedServices = () => serviceBoxes.filter((b) => b.checked).map((b) => b.value);
-  serviceBoxes.forEach((b) => b.addEventListener('change', () => serviceBoxes[0].setCustomValidity('')));
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const f = form.elements;
-    f.name.value = f.name.value.trim();
-    f.phone.value = f.phone.value.trim();
-    f.email.value = f.email.value.trim();
-    if (dateInput.value && isPastDate(dateInput.value, new Date())) {
-      dateInput.setCustomValidity('Please choose today or a future date.');
-    }
-    serviceBoxes[0].setCustomValidity(pickedServices().length ? '' : 'Please choose at least one service.');
-    if (!form.reportValidity()) return;
-
-    const data = {
-      name: f.name.value,
-      phone: f.phone.value,
-      email: f.email.value,
-      service: pickedServices().join(', '),
-      technician: f.technician.value,
-      date: f.date.value,
-      time: f.time.value,
-      notes: f.notes.value.trim(),
-    };
-
-    if (!WEB3FORMS_KEY) {
-      location.href = buildBookingMailto(data, SALON_EMAIL);
-      status.textContent = 'Your email app should open with your request. Nothing happened? Call (718) 392-8899.';
-      return;
-    }
-
-    if (f.botcheck.checked) return; // honeypot: only bots tick the hidden box
-
-    const button = form.querySelector('button[type="submit"]');
-    button.disabled = true;
-    status.textContent = 'Sending your request…';
-    try {
-      const res = await fetch('https://api.web3forms.com/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(buildBookingSubmission(data, WEB3FORMS_KEY)),
-      });
-      const result = await res.json();
-      if (!result.success) throw new Error(result.message);
-      form.reset();
-      fillTimes();
-      status.textContent = "Thanks! Your request was sent. We'll contact you to confirm.";
-    } catch {
-      status.textContent = "Sorry, we couldn't send your request. Please call (718) 392-8899.";
-    } finally {
-      button.disabled = false;
-    }
-  });
 </script>
+<script type="module" src="js/booking.mjs"></script>
 <script data-goatcounter="https://nailclubspany.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>
 </body>
