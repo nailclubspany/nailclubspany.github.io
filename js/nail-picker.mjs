@@ -25,6 +25,10 @@ function setOpen(item, open) {
   panel.disabled = !open;
   panel.hidden = !open;
   item.classList.toggle('open', open);
+  if (!open) {
+    for (const error of panel.querySelectorAll('.choice-error')) error.hidden = true;
+    for (const group of panel.querySelectorAll('.choice.missing')) group.classList.remove('missing');
+  }
 }
 
 function buildItem(service) {
@@ -35,12 +39,18 @@ function buildItem(service) {
   const panel = el('fieldset', { className: 'nail-details', disabled: true, hidden: true });
   for (const choice of service.choices) {
     const pills = el('div', { className: 'pills' });
+    // The radios are invisible behind the pills, so the browser's own
+    // "please select" bubble is easy to miss; say it under the group instead.
+    const error = el('p', { className: 'choice-error', textContent: 'Please choose one.', hidden: true });
+    const group = el('fieldset', { className: 'choice' }, el('legend', { className: 'choice-label', textContent: choice.label }), pills, error);
     choice.options.forEach((option, i) => {
       // `required` on one radio makes the whole same-name group required.
       const radio = el('input', { type: 'radio', name: `${service.name}|${choice.label}`, value: option, required: i === 0 });
+      radio.addEventListener('invalid', () => { error.hidden = false; group.classList.add('missing'); });
+      radio.addEventListener('change', () => { error.hidden = true; group.classList.remove('missing'); });
       pills.append(el('label', {}, radio, option));
     });
-    panel.append(el('fieldset', { className: 'choice' }, el('legend', { className: 'choice-label', textContent: choice.label }), pills));
+    panel.append(group);
   }
   if (service.addOns.length) {
     const addons = el('div', { className: 'addons' });
