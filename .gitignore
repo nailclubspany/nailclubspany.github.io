@@ -3,3 +3,6 @@
 docs/
 claude.md
 CLAUDE.md
+node_modules/
+# Database migrations + owner guide: kept on this computer only (GitHub Pages would publish them)
+supabase/
