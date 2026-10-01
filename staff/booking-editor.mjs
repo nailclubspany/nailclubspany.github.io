@@ -8,7 +8,8 @@
 // pure helpers importable by plain `node --test`.
 import { salonInstant } from '../js/schedule.mjs';
 import { overlapMessage } from './requests.mjs';
-import { say, t } from './i18n.mjs';
+import { say, t, fieldMessage } from './i18n.mjs';
+import { inlineErrors } from '../js/inline-errors.mjs';
 
 // --- Pure helpers ------------------------------------------------------
 
@@ -129,6 +130,7 @@ export function open(hostEl, ctx, opts) {
 
   const form = document.createElement('form');
   form.className = 'editor-form';
+  inlineErrors(form, fieldMessage);
 
   const nameInput = document.createElement('input');
   nameInput.type = 'text';

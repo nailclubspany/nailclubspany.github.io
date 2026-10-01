@@ -9,7 +9,8 @@
 import { salonInstant, addDaysToIso, salonParts, formatMinutes } from '../js/schedule.mjs';
 import { parseTimeMinutes, createLoadSequencer } from './calendar.mjs';
 import { formatDay } from './requests.mjs';
-import { say, t, lookup, tri } from './i18n.mjs';
+import { say, sayBriefly, t, lookup, tri, fieldMessage } from './i18n.mjs';
+import { inlineErrors } from '../js/inline-errors.mjs';
 
 // --- Pure helpers ------------------------------------------------------
 
@@ -167,6 +168,7 @@ function weekdaySection(weekday) {
 function buildHoursForm() {
   const form = document.createElement('form');
   form.className = 'hours-form';
+  inlineErrors(form, fieldMessage);
 
   const title = document.createElement('h2');
   say(title, 'Weekly hours');
@@ -256,7 +258,7 @@ async function saveHours(rows) {
       return;
     }
   }
-  say(hoursStatus, 'Saved.');
+  sayBriefly(hoursStatus, 'Saved.');
   await reloadProvider();
 }
 
@@ -319,6 +321,7 @@ function buildTimeOffSection() {
 
   timeOffForm = document.createElement('form');
   timeOffForm.className = 'time-off-form';
+  inlineErrors(timeOffForm, fieldMessage);
 
   const dayField = document.createElement('label');
   dayField.className = 'field';

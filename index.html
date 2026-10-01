@@ -143,6 +143,9 @@
   form { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .full { grid-column: 1 / -1; }
   label { display: grid; gap: 4px; font-size: 13px; color: #d4d4d4; min-width: 0; }
+  .field-error { font-size: 13px; color: #ff9b8f; }
+  input[aria-invalid="true"], select[aria-invalid="true"] { border-color: #ff9b8f; }
+  .services-pick > .field-error { grid-column: 1 / -1; }
   input, select, textarea { width: 100%; min-width: 0; font: 16px/1.4 var(--body); color: var(--ink); background: #fff; border: 1.5px solid transparent; border-radius: 8px; padding: 7px 12px; min-height: 40px; }
   /* iOS Safari gives date/time inputs a built-in minimum width that can push the page sideways */
   input[type="date"], input[type="time"] { -webkit-appearance: none; appearance: none; display: block; }
@@ -190,14 +193,15 @@
   .open-status:empty { display: none; }
   #hours .open-status { margin: 4px 0 0; }
   tr.today td:first-child::after { content: ' · Today'; font-size: 12px; color: var(--accent); }
-  .contact-list { list-style: none; padding: 0; margin: 18px 0 0; }
-  .contact-list li { padding: 11px 0; border-bottom: 1px solid var(--line); display: grid; gap: 2px; }
-  .contact-list small { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
-  .contact-list a { font-size: 17px; text-decoration: none; word-break: break-word; }
-  .contact-list a:hover { color: var(--accent-dark); }
-  .perks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; padding: 0; list-style: none; }
-  .perks li { font-size: 13px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
-  .directions { margin-top: 20px; }
+  .visit { font-style: normal; margin-top: 18px; }
+  .visit-addr { display: inline-block; font: 500 clamp(22px, 3.4vw, 27px)/1.3 var(--display); text-decoration: none; }
+  .visit-lines { margin: 16px 0 0; line-height: 1.9; }
+  .visit-lines a { font-weight: 500; text-underline-offset: 3px; word-break: break-word; }
+  .visit a:hover { color: var(--accent-dark); }
+  .perks { display: flex; flex-wrap: wrap; margin: 18px 0 0; padding: 0; list-style: none; font-size: 14px; color: var(--muted); }
+  .perks li { white-space: nowrap; }
+  .perks li:not(:last-child)::after { content: '·'; margin: 0 8px; }
+  .directions { margin-top: 22px; }
 
   footer { border-top: 1px solid var(--line); padding-block: 22px; font-size: 13px; color: var(--muted); }
   footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
@@ -520,15 +524,17 @@
       <div id="contact">
         <p class="eyebrow">Visit &amp; contact</p>
         <h2>Find us</h2>
-        <ul class="contact-list">
+        <address class="visit">
           <!-- ADDRESS -->
-          <li><small>Address</small><a href="https://www.google.com/maps/place/The+Nail+Club+%26+Spa/@40.740175,-73.9259104,17z/data=!3m1!4b1!4m6!3m5!1s0x89c25fc3c4560633:0x47fd7d933a673481!8m2!3d40.740171!4d-73.9233355!16s%2Fg%2F11vx486pxy" target="_blank" rel="noopener">41-22 Greenpoint Ave, Sunnyside, NY 11104</a></li>
-          <!-- PHONE -->
-          <li><small>Phone</small><a href="tel:+17183928899">(718) 392-8899</a></li>
-          <!-- EMAIL (placeholder — replace with the salon's real address) -->
-          <li><small>Email</small><a href="mailto:nailclubspany@gmail.com">nailclubspany@gmail.com</a></li>
-          <li><small>Instagram</small><a href="https://www.instagram.com/nailclubspany/" target="_blank" rel="noopener">@nailclubspany</a></li>
-        </ul>
+          <a class="visit-addr" href="https://www.google.com/maps/place/The+Nail+Club+%26+Spa/@40.740175,-73.9259104,17z/data=!3m1!4b1!4m6!3m5!1s0x89c25fc3c4560633:0x47fd7d933a673481!8m2!3d40.740171!4d-73.9233355!16s%2Fg%2F11vx486pxy" target="_blank" rel="noopener">41-22 Greenpoint Ave<br>Sunnyside, NY 11104</a>
+          <p class="visit-lines">
+            <!-- PHONE -->
+            Call <a href="tel:+17183928899">(718) 392-8899</a><br>
+            <!-- EMAIL (placeholder — replace with the salon's real address) -->
+            Email <a href="mailto:nailclubspany@gmail.com">nailclubspany@gmail.com</a><br>
+            Follow <a href="https://www.instagram.com/nailclubspany/" target="_blank" rel="noopener">@nailclubspany</a> on Instagram
+          </p>
+        </address>
         <ul class="perks">
           <li>Walk-ins welcome</li>
           <li>Wheelchair accessible</li>
@@ -577,10 +583,14 @@
   // JSON payload for Web3Forms, which emails it to the inbox that owns the access key.
   // `held` marks a request that was already booked live (server-side hold) rather than
   // merely requested — the subject and an extra status field flag it for staff.
+  // `held`: true = saved online as a Pending hold; a string = live booking
+  // could NOT save it (the string says why, for staff); false = email-only form.
   function buildBookingSubmission(data, accessKey, held = false) {
+    const notSaved = typeof held === 'string';
+    const tag = notSaved ? ' (NOT saved online)' : held ? ' (held)' : '';
     const payload = {
       access_key: accessKey,
-      subject: held ? `Appointment request (held) – ${data.name}` : `Appointment request – ${data.name}`,
+      subject: `Appointment request${tag} – ${data.name}`,
       from_name: 'Nail Club Spa NY',
       name: data.name,
       phone: data.phone,
@@ -591,7 +601,8 @@
       'preferred time': data.time,
       notes: data.notes ? data.notes : '(none)',
     };
-    if (held) payload.status = 'Held online — confirm in the staff app';
+    if (notSaved) payload.status = held;
+    else if (held) payload.status = 'Held online — confirm in the staff app';
     return payload;
   }
 
@@ -618,7 +629,7 @@
   function timeSlots(day) {
     const [open, close] = SALON_HOURS[day];
     const slots = [];
-    for (let m = open; m < close; m += 15) {
+    for (let m = open; m <= close - 30; m += 15) { // last appointment 30 min before close
       const h = Math.floor(m / 60);
       slots.push(`${h % 12 || 12}:${String(m % 60).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`);
     }

@@ -10,6 +10,15 @@
 
 export const SLOT_STEP = 15;
 export const BLOCK_MIN = 60;
+// The last start is this many minutes before a shift ends (e.g. 7:30 PM for
+// an 8 PM finish): the appointment may run past the shift. Keep in sync with
+// request_appointment in the database.
+export const LAST_START_BEFORE_END = 30;
+// Salon-wide latest start (minute of day) by weekday, 0 = Sunday: 6:30 PM on
+// Sundays, 7:30 PM otherwise — 30 minutes before closing, whatever a
+// provider's shift says. Keep in sync with request_appointment in the
+// database and SALON_HOURS in index.html.
+export const LAST_START = { 0: 1110, 1: 1170, 2: 1170, 3: 1170, 4: 1170, 5: 1170, 6: 1170 };
 export const LEAD_MIN = 60;
 export const HORIZON_DAYS = 60;
 export const TZ = 'America/New_York';
@@ -105,12 +114,13 @@ function overlaps(aStart, aEnd, bStart, bEnd) {
   return aStart < bEnd && bStart < aEnd;
 }
 
-// Whether `staffId` has a single hours row fully covering [m, m+BLOCK_MIN),
-// with no overlapping off or busy block.
+// Whether `staffId` has a single hours row that starts by `m` and ends at
+// least LAST_START_BEFORE_END after it, with no off or busy block
+// overlapping [m, m+BLOCK_MIN).
 function staffCovers(dayData, staffId, m) {
   const end = m + BLOCK_MIN;
   const hasShift = dayData.hours.some(
-    (h) => h.staff_id === staffId && h.start_min <= m && h.end_min >= end
+    (h) => h.staff_id === staffId && h.start_min <= m && h.end_min >= m + LAST_START_BEFORE_END
   );
   if (!hasShift) return false;
   const blocked = [...dayData.off, ...dayData.busy].some(
@@ -128,8 +138,10 @@ export function openSlots(dayData, staffId, earliest) {
   if (candidates.length === 0) return [];
 
   const start = Math.max(0, Math.ceil(earliest / SLOT_STEP) * SLOT_STEP);
+  const [y, mo, d] = dayData.day.split('-').map(Number);
+  const last = LAST_START[new Date(Date.UTC(y, mo - 1, d)).getUTCDay()];
   const slots = [];
-  for (let m = start; m + BLOCK_MIN <= 1440; m += SLOT_STEP) {
+  for (let m = start; m <= last && m + BLOCK_MIN <= 1440; m += SLOT_STEP) {
     if (candidates.some((s) => staffCovers(dayData, s.id, m))) slots.push(m);
   }
   return slots;

@@ -103,6 +103,13 @@ test('held submission marks subject and status', () => {
   assert.equal(payload.status, 'Held online — confirm in the staff app');
 });
 
+test('a request that was not saved online says so in the subject and status', () => {
+  const reason = 'NOT saved online — the booking system had a problem. Call the customer to confirm.';
+  const payload = buildBookingSubmission(sample, 'KEY-123', reason);
+  assert.equal(payload.subject, 'Appointment request (NOT saved online) – Ann & Bo');
+  assert.equal(payload.status, reason);
+});
+
 test('localISODate uses local time, not UTC', () => {
   assert.equal(localISODate(new Date(2026, 8, 25, 23, 30)), '2026-09-25');
 });
@@ -143,18 +150,18 @@ test('openStatus: Sunday closes at 7pm', () => {
 
 const { timeSlots, weekdayOf } = ctx;
 
-test('timeSlots: 15-minute AM/PM slots from opening until 15 min before close', () => {
+test('timeSlots: 15-minute AM/PM slots from opening until 30 min before close', () => {
   const mon = timeSlots(1);
   assert.equal(mon[0], '10:00 AM');
   assert.equal(mon[1], '10:15 AM');
   assert.ok(mon.includes('12:00 PM'));
   assert.ok(mon.includes('12:45 PM'));
-  assert.equal(mon.at(-1), '7:45 PM');
-  assert.equal(mon.length, 40);
+  assert.equal(mon.at(-1), '7:30 PM');
+  assert.equal(mon.length, 39);
 });
 
 test('timeSlots: Sunday stops earlier (closes 7pm)', () => {
-  assert.equal(timeSlots(0).at(-1), '6:45 PM');
+  assert.equal(timeSlots(0).at(-1), '6:30 PM');
 });
 
 test('weekdayOf reads the calendar date, not UTC', () => {

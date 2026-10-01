@@ -23,6 +23,7 @@ import { HORIZON_DAYS, salonToday, earliestStart, unknownServices, openSlots, fo
 import { withTimeout, canOverwriteStatus, createGenerationalCache, resumeRefreshDue, isTestHost, phoneLooksValid } from './booking-support.mjs';
 import { renderNailPicker, serviceSummary } from './nail-picker.mjs';
 import { SPA_SERVICES, bookingNotes } from './services.mjs';
+import { inlineErrors, showError } from './inline-errors.mjs';
 
 const SALON_EMAIL = 'nailclubspany@gmail.com'; // keep in sync with Contact section
 // Web3Forms access key for SALON_EMAIL (get one free at web3forms.com). Until it's set, the form falls back to mailto.
@@ -46,8 +47,27 @@ const status = document.getElementById('booking-status');
 const dateInput = form.elements.date;
 const timeSelect = form.elements.time;
 const technicianSelect = form.elements.technician;
-// A corrected phone number clears the too-short message (set on submit).
+// Every problem shows as text under its field (see js/inline-errors.mjs).
+const FIELD_COPY = {
+  name: { valueMissing: 'Please enter your name.' },
+  phone: { valueMissing: 'Please enter your phone number.' },
+  email: { valueMissing: 'Please enter your email.', typeMismatch: 'Please enter a valid email address.' },
+  date: { valueMissing: 'Please choose a date.' },
+  time: { valueMissing: 'Please choose a time.' },
+};
+inlineErrors(form, (control) => {
+  const copy = FIELD_COPY[control.name] ?? {};
+  if (control.validity.valueMissing) return copy.valueMissing;
+  if (control.validity.typeMismatch) return copy.typeMismatch;
+  return undefined; // custom messages (phone too short, past date, no service) as set
+});
+// A corrected phone number clears the too-short message (set on submit);
+// leaving the field with a too-short number shows it straight away.
 form.elements.phone.addEventListener('input', () => form.elements.phone.setCustomValidity(''));
+form.elements.phone.addEventListener('blur', () => {
+  const phone = form.elements.phone;
+  if (phone.value.trim() && !phoneLooksValid(phone.value)) showError(phone, PHONE_COPY);
+});
 // Render the detailed service boxes first, so serviceBoxes below includes them.
 renderNailPicker(document.getElementById('nail-services'));
 renderNailPicker(document.getElementById('spa-services'), SPA_SERVICES);
@@ -64,6 +84,8 @@ const TAKEN_COPY = 'That time was just taken — here are the open times.';
 const TOO_MANY_COPY = 'You already have 3 requests waiting — please call (718) 392-8899.';
 const PHONE_COPY = 'Please enter a 10-digit phone number, including area code.';
 const ERROR_COPY = "Sorry, we couldn't send your request. Please call (718) 392-8899.";
+// Live booking failed but the request reached the salon by email.
+const EMAILED_COPY = "Thanks! Your request was sent. We'll contact you to confirm.";
 
 // Messages a background availability refresh (triggered by a realtime broadcast, or
 // the one that follows a submission) is allowed to write over — never a
@@ -320,6 +342,27 @@ function watchForStaleSlots() {
   }, PERIODIC_REFRESH_MS);
 }
 
+// Emails the salon a copy of a live-mode request through Web3Forms.
+// `held`: true = saved online; a string = NOT saved, and why. Resolves to
+// whether Web3Forms accepted it (test hosts never email: false).
+async function emailSalon(data, held) {
+  const payload = buildBookingSubmission(data, WEB3FORMS_KEY, held);
+  if (TEST_MODE) {
+    console.log('Test mode — not emailed:', payload);
+    return false;
+  }
+  try {
+    const res = await fetch('https://api.web3forms.com/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return (await res.json()).success === true;
+  } catch {
+    return false;
+  }
+}
+
 function enterLiveMode() {
   const todayIso = salonToday(new Date());
   dateInput.min = todayIso;
@@ -353,11 +396,24 @@ function enterLiveMode() {
     // RPC is in flight, and the email must describe what was booked.
     const summary = serviceSummary(form);
     const notes = f.notes.value.trim();
+    // Transition period: the salon gets an email for EVERY request, whatever
+    // happens online — marked held, or NOT saved online with the reason.
+    const emailData = {
+      name: f.name.value,
+      phone: f.phone.value,
+      email: f.email.value,
+      service: summary.detailLines.join('; '),
+      technician: f.technician.value ? f.technician.selectedOptions[0].textContent : 'No preference',
+      date: day,
+      time: formatMinutes(startMin),
+      notes,
+    };
 
     const button = form.querySelector('button[type="submit"]');
     button.disabled = true;
     status.textContent = 'Sending your request…';
     submitting = true;
+    let saved = false; // the request is held online — never email "NOT saved" after this
     try {
       const { data, error } = await supabase.rpc('request_appointment', {
         p_name: f.name.value,
@@ -373,49 +429,44 @@ function enterLiveMode() {
       if (error) throw error;
 
       if (data?.ok) {
+        saved = true;
         // Clear synchronously, with no await in between, so the realtime
         // broadcast our own insert triggers (racing this same refresh) can
         // never see a "held pick" for this booking and show TAKEN_COPY for
         // it — see subscribeAvailability(). JS run-to-completion guarantees
         // this runs before that broadcast's handler can.
         lastPick = '';
-        const heldData = {
-          name: f.name.value,
-          phone: f.phone.value,
-          email: f.email.value,
-          service: summary.detailLines.join('; '),
-          technician: data.staff_name,
-          date: day,
-          time: formatMinutes(startMin),
-          notes,
-        };
         form.reset();
-        if (TEST_MODE) {
-          console.log('Test mode — not emailed:', buildBookingSubmission(heldData, WEB3FORMS_KEY, true));
-        } else {
-          fetch('https://api.web3forms.com/submit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify(buildBookingSubmission(heldData, WEB3FORMS_KEY, true)),
-          }).catch(() => { /* fire-and-forget: staff copy only, RPC already holds the slot */ });
-        }
+        // Fire-and-forget: staff copy only, the RPC already holds the slot.
+        emailSalon({ ...emailData, technician: data.staff_name ?? 'No preference' }, true);
         dayAvailability.invalidate(day);
         await refresh();
         // Set after refresh so it isn't cleared by refresh's own '' write.
         status.textContent = TEST_MODE ? `${SUCCESS_COPY} (Test mode — not emailed.)` : SUCCESS_COPY;
       } else if (data?.reason === 'slot_taken') {
+        emailSalon(emailData, 'NOT saved online — that time was just taken; the customer was shown the open times and may send another request.');
         // Also covers a slot that aged inside the lead time (or past the
         // horizon) while the form was open: refetch and show what's open.
         dayAvailability.invalidate(day);
         await refresh();
         status.textContent = TAKEN_COPY;
       } else if (data?.reason === 'too_many') {
+        emailSalon(emailData, 'NOT saved online — this phone number already has 3 pending requests. Call the customer.');
         status.textContent = TOO_MANY_COPY;
       } else {
-        status.textContent = ERROR_COPY; // 'invalid' or unrecognized
+        throw new Error(data?.reason ?? 'unexpected reply'); // 'invalid' or unrecognized
       }
     } catch {
-      status.textContent = ERROR_COPY;
+      if (saved) {
+        // Only the after-booking refresh failed; the request is held.
+        status.textContent = SUCCESS_COPY;
+        return;
+      }
+      // The booking system failed, but the salon still gets the request by
+      // email; tell the customer it arrived only if that email went through.
+      const emailed = await emailSalon(emailData, 'NOT saved online — the booking system had a problem. Call the customer to confirm.');
+      status.textContent = emailed ? EMAILED_COPY : ERROR_COPY;
+      if (emailed) form.reset();
     } finally {
       submitting = false;
       button.disabled = false;

@@ -51,12 +51,19 @@ function baseDay(overrides = {}) {
 
 // --- openSlots --------------------------------------------------------------
 
-test('last slot fits before end', () => {
+test('last slot is 30 minutes before the shift ends', () => {
   const day = baseDay({ hours: [{ staff_id: 1, start_min: 600, end_min: 1080 }] });
   const slots = openSlots(day, null, 0);
   assert.equal(slots[0], 600);
-  assert.equal(slots.at(-1), 1020);
-  assert.equal(slots.length, 29);
+  assert.equal(slots.at(-1), 1050);
+  assert.equal(slots.length, 31);
+});
+
+test('salon cap: no start after 7:30 PM Mon–Sat or 6:30 PM Sunday, even on a longer shift', () => {
+  const hours = [{ staff_id: 1, start_min: 600, end_min: 1320 }]; // 10 AM–10 PM
+  assert.equal(openSlots(baseDay({ hours }), null, 0).at(-1), 1170); // Monday 2026-10-05
+  const sunday = { ...baseDay({ hours }), day: '2026-10-04' };
+  assert.equal(openSlots(sunday, null, 0).at(-1), 1110);
 });
 
 test('split shift gap', () => {
@@ -67,8 +74,8 @@ test('split shift gap', () => {
     ],
   });
   const slots = openSlots(day, null, 0);
-  assert.ok(slots.includes(720));
-  assert.ok(!slots.includes(735));
+  assert.ok(slots.includes(750));
+  assert.ok(!slots.includes(765));
   assert.ok(!slots.includes(780));
   assert.ok(!slots.includes(795));
   assert.ok(slots.includes(840));

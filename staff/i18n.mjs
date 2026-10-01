@@ -25,7 +25,13 @@ export const STRINGS = {
   'Sign-in failed — check the email and password.': ['No se pudo entrar. Revisa el correo y la contraseña.', '登录失败，请检查邮箱和密码。'],
   "Live booking isn't set up yet — see supabase/README.md.": ['Las reservas en línea aún no están configuradas.', '在线预约尚未设置。'],
 
+  // Header
+  'Sound on': ['Sonido activado', '提示音开'],
+  'Sound off': ['Sonido desactivado', '提示音关'],
+
   // Shared
+  'Please fill this in.': ['Completa este campo.', '请填写此项。'],
+  'Please enter a valid email address.': ['Escribe un correo válido.', '请输入有效的邮箱地址。'],
   'Provider': ['Profesional', '技师'],
   'Day': ['Día', '日期'],
   'Length': ['Duración', '时长'],
@@ -41,8 +47,10 @@ export const STRINGS = {
   // Requests
   'Confirm': ['Confirmar', '确认'],
   'Decline': ['Rechazar', '拒绝'],
+  'Tap again to decline': ['Toca otra vez para rechazar', '再点一次以拒绝'],
   'Confirm booking': ['Confirmar cita', '确认预约'],
-  'Unassigned': ['Sin asignar', '未分配'],
+  'No preference': ['Sin preferencia', '无指定技师'],
+  'Choose a provider…': ['Elige un profesional…', '选择技师…'],
   '(no name given)': ['(sin nombre)', '（未留姓名）'],
   'No pending requests.': ['No hay solicitudes pendientes.', '没有待处理的预约请求。'],
   'Could not load requests — try again.': ['No se pudieron cargar las solicitudes. Inténtalo de nuevo.', '无法加载预约请求，请重试。'],
@@ -170,8 +178,32 @@ export function t(msg) {
   return m[current] || m.en;
 }
 
+// Text for a field that failed the browser's checks, in the chosen language
+// (shown under the field by js/inline-errors.mjs). Other failures keep the
+// message they were given.
+export function fieldMessage(control) {
+  if (control.validity.valueMissing) return t('Please fill this in.');
+  if (control.validity.typeMismatch) return t('Please enter a valid email address.');
+  return undefined;
+}
+
 // Sets `el`'s text to t(msg); '' / null clears it.
 export function say(el, msg) {
   el.textContent = msg ? t(msg) : '';
+  el.classList?.remove('is-ok');
+  return el;
+}
+
+// Like say(), but for a passing confirmation such as 'Saved.': shown in the
+// success colour and cleared after `ms` — unless something else (an error)
+// has been written to `el` in the meantime.
+export function sayBriefly(el, msg, ms = 3000) {
+  clearTimeout(el.sayTimer);
+  say(el, msg);
+  el.classList?.add('is-ok');
+  const shown = el.textContent;
+  el.sayTimer = setTimeout(() => {
+    if (el.textContent === shown) say(el, '');
+  }, ms);
   return el;
 }

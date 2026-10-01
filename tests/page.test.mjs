@@ -239,3 +239,10 @@ test('booking inputs carry length caps matching the server', () => {
   // details js/services.mjs puts in front of the customer's notes.
   assert.match(field('notes'), /\smaxlength="500"/);
 });
+
+test('booking form errors show inline (not just the browser bubble)', () => {
+  const js = readFileSync(new URL('../js/booking.mjs', import.meta.url), 'utf8');
+  assert.match(js, /import \{ inlineErrors, showError \} from '\.\/inline-errors\.mjs';/);
+  assert.match(js, /inlineErrors\(form,/);
+  assert.match(html, /\.field-error \{/);
+});

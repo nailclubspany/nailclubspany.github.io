@@ -1,6 +1,12 @@
 // Pure helpers for the staff app shell (staff/app.mjs). No DOM, no network,
 // no CDN import — so node tests can import them directly.
 
+// The ids in `ids` that aren't in the Set `known` — tells a brand-new
+// pending request apart from any other booking change (a confirm, a move).
+export function newIdsSince(known, ids) {
+  return ids.filter((id) => !known.has(id));
+}
+
 // A tiny listener registry. `add(cb)` returns an idempotent unsubscribe;
 // `emit(...args)` calls every listener registered at that moment (a
 // listener removed mid-emit is skipped), and one listener throwing never

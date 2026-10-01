@@ -391,14 +391,31 @@ test('request on DST day stores local wall time', async () => {
 test('slot must be inside a shift, off-grid rejected', async () => {
   const { db, staffIds } = await setup();
 
-  const late = await requestAppointment(db, { startMin: 1050, staffId: staffIds.Mia });
+  // Shift ends 6 PM (1080): the last start is 30 minutes before, at 5:30 PM.
+  const late = await requestAppointment(db, { startMin: 1065, staffId: staffIds.Mia });
   assert.deepEqual(late, { ok: false, reason: 'slot_taken' });
 
-  const fits = await requestAppointment(db, { startMin: 1020, staffId: staffIds.Mia });
+  const fits = await requestAppointment(db, { startMin: 1050, staffId: staffIds.Mia });
   assert.equal(fits.ok, true);
 
   const offGrid = await requestAppointment(db, { startMin: 607, staffId: staffIds.Mia });
   assert.deepEqual(offGrid, { ok: false, reason: 'invalid' });
+});
+
+test('salon cap: no start after 7:30 PM (6:30 PM Sunday), even on a longer shift', async () => {
+  const { db, staffIds } = await setup();
+  await db.query(`update weekly_hours set end_time = '22:00' where staff_id = $1`, [staffIds.Mia]);
+
+  const lateTue = await requestAppointment(db, { startMin: 1185, staffId: staffIds.Mia });
+  assert.deepEqual(lateTue, { ok: false, reason: 'slot_taken' });
+  const lastTue = await requestAppointment(db, { startMin: 1170, staffId: staffIds.Mia });
+  assert.equal(lastTue.ok, true);
+
+  const sunday = '2026-10-25';
+  const lateSun = await requestAppointment(db, { day: sunday, startMin: 1125, staffId: staffIds.Mia });
+  assert.deepEqual(lateSun, { ok: false, reason: 'slot_taken' });
+  const lastSun = await requestAppointment(db, { day: sunday, startMin: 1110, staffId: staffIds.Mia });
+  assert.equal(lastSun.ok, true);
 });
 
 test('time off and busy block', async () => {
@@ -433,48 +450,52 @@ test('lead time and horizon', async () => {
   assert.deepEqual(tooFar, { ok: false, reason: 'slot_taken' });
 });
 
-test('no preference picks least-booked capable staff', async () => {
+test('no preference is saved unassigned and blocks nobody', async () => {
   const { db, staffIds } = await setup();
-
-  await db.query(
-    `insert into appointments (staff_id, services, starts_at, ends_at, status)
-     values ($1, $2, $3, $4, 'pending')`,
-    [staffIds.Mia, ['Nails'], '2026-10-27T10:00:00-04', '2026-10-27T11:00:00-04']
-  );
 
   const res = await requestAppointment(db, { staffId: null, startMin: 780 });
-  assert.equal(res.ok, true);
-  assert.equal(res.staff_name, 'Yoyo');
+  assert.deepEqual(res, { ok: true, staff_name: null });
+  const { rows } = await db.query('select staff_id, status from appointments where id = $1', [await latestId(db)]);
+  assert.deepEqual(rows[0], { staff_id: null, status: 'pending' });
 
-  // Nobody has Massage as a skill, but skills no longer turn a request away:
-  // a free provider still gets it.
-  const unskilled = await requestAppointment(db, { staffId: null, startMin: 900, services: ['Massage'] });
-  assert.equal(unskilled.ok, true);
+  // It holds nobody's time: Mia can still be booked by name, and another
+  // no-preference request for the same time is accepted too.
+  const named = await requestAppointment(db, { staffId: staffIds.Mia, startMin: 780, phone: '718-555-0101' });
+  assert.deepEqual(named, { ok: true, staff_name: 'Mia' });
+  const again = await requestAppointment(db, { staffId: null, startMin: 780, phone: '718-555-0102' });
+  assert.deepEqual(again, { ok: true, staff_name: null });
+
+  // Skills don't turn it away (nobody has Massage as a skill).
+  const unskilled = await requestAppointment(db, { staffId: null, startMin: 900, services: ['Massage'], phone: '718-555-0103' });
+  assert.deepEqual(unskilled, { ok: true, staff_name: null });
 });
 
-test('no preference prefers a skilled provider over a less-booked one without the skill', async () => {
+test('no preference still needs at least one provider free at that time', async () => {
   const { db, staffIds } = await setup();
 
-  // Mia (has Gel X) is busier than Yoyo (doesn't), but Gel X still goes to Mia.
-  await db.query(
-    `insert into appointments (staff_id, services, starts_at, ends_at, status)
-     values ($1, $2, $3, $4, 'pending')`,
-    [staffIds.Mia, ['Nails'], '2026-10-27T10:00:00-04', '2026-10-27T11:00:00-04']
-  );
-  const res = await requestAppointment(db, { staffId: null, startMin: 780, services: ['Gel X'] });
-  assert.equal(res.staff_name, 'Mia');
+  for (const id of [staffIds.Mia, staffIds.Yoyo]) {
+    await db.query(
+      `insert into appointments (staff_id, services, starts_at, ends_at, status)
+       values ($1, $2, $3, $4, 'confirmed')`,
+      [id, ['Nails'], '2026-10-27T13:00:00-04', '2026-10-27T14:00:00-04']
+    );
+  }
+  const bothBusy = await requestAppointment(db, { staffId: null, startMin: 780 });
+  assert.deepEqual(bothBusy, { ok: false, reason: 'slot_taken' });
 
-  // With Mia taken at that time, Yoyo gets it rather than turning it away.
-  const next = await requestAppointment(db, { staffId: null, startMin: 780, services: ['Gel X'], phone: '718-555-0199' });
-  assert.equal(next.staff_name, 'Yoyo');
+  // Outside every shift (shifts end 6 PM, so 5:45 PM is too late).
+  const afterShifts = await requestAppointment(db, { staffId: null, startMin: 1065 });
+  assert.deepEqual(afterShifts, { ok: false, reason: 'slot_taken' });
+
+  const free = await requestAppointment(db, { staffId: null, startMin: 900 });
+  assert.deepEqual(free, { ok: true, staff_name: null });
 });
 
 test('requires mapping', async () => {
   const { db } = await setup();
 
   const res = await requestAppointment(db, { services: ['$38 Bundle: Regular Mani + Pedi', 'Other'] });
-  assert.equal(res.ok, true);
-  assert.ok(['Mia', 'Yoyo', 'Carmela', 'Lili', 'Linda'].includes(res.staff_name));
+  assert.deepEqual(res, { ok: true, staff_name: null });
 
   const unknown = await requestAppointment(db, { services: ['Not A Real Service'] });
   assert.deepEqual(unknown, { ok: false, reason: 'invalid' });
@@ -556,11 +577,11 @@ test('per-phone cap', async () => {
   assert.equal(other.ok, true);
 });
 
-test('no preference falls through to the next candidate on an insert-time overlap', async () => {
+test('a named provider taken at insert time reports slot_taken', async () => {
   const { db, staffIds } = await setup();
 
-  // Simulate a race: Mia looks free when candidates are chosen, but her
-  // insert hits the exclusion constraint (someone else grabbed her first).
+  // Simulate a race: Mia looks free when checked, but her insert hits the
+  // exclusion constraint (someone else grabbed her first).
   await db.exec(`
     create function test_race() returns trigger language plpgsql as $$
     begin
@@ -572,9 +593,6 @@ test('no preference falls through to the next candidate on an insert-time overla
     create trigger test_race before insert on appointments
       for each row execute function test_race();
   `);
-
-  const res = await requestAppointment(db, { staffId: null, startMin: 780 });
-  assert.deepEqual(res, { ok: true, staff_name: 'Yoyo' });
 
   const pinned = await requestAppointment(db, { staffId: staffIds.Mia, startMin: 900 });
   assert.deepEqual(pinned, { ok: false, reason: 'slot_taken' });

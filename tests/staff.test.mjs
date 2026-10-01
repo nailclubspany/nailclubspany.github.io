@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { formatPhone, requestNotes, confirmPatch, formatDay, overlapMessage, confirmProviderOptions, createDeferredReload } from '../staff/requests.mjs';
 import { layoutDay, columnClass, weekdayOf, clipToDay, parseTimeMinutes, createLoadSequencer, createForgetfulCache, tapMinute } from '../staff/calendar.mjs';
-import { createListenerSet, authAction } from '../staff/shell-support.mjs';
+import { createListenerSet, authAction, newIdsSince } from '../staff/shell-support.mjs';
 import { apptPayload } from '../staff/booking-editor.mjs';
 import { validateShifts, timeOptions, DEFAULT_SHIFT } from '../staff/schedules.mjs';
 import { reorder } from '../staff/team.mjs';
@@ -445,6 +445,18 @@ test('confirmProviderOptions: active staff, current provider selected', () => {
   ]);
 });
 
+test('confirmProviderOptions: a No preference request starts on "Choose a provider…"', () => {
+  const staff = [
+    { id: 1, name: 'Mia', active: true },
+    { id: 2, name: 'Yoyo', active: true },
+  ];
+  assert.deepEqual(confirmProviderOptions(staff, null), [
+    { id: '', label: 'Choose a provider…', selected: true },
+    { id: 1, label: 'Mia', selected: false },
+    { id: 2, label: 'Yoyo', selected: false },
+  ]);
+});
+
 test('confirmProviderOptions: an inactive current provider is kept, selected and marked', () => {
   const staff = [
     { id: 1, name: 'Mia', active: true },
@@ -569,4 +581,12 @@ test('overlapMessage and validateShifts come back in all three languages', () =>
     { weekday: 2, start: '13:00', end: '18:00' },
   ]);
   assert.deepEqual(overlap, { en: 'Tuesday shifts overlap', es: 'Los turnos del martes se cruzan', zh: '星期二的班次时间重叠' });
+});
+
+test('newIdsSince: only ids not seen before count as new requests', () => {
+  const known = new Set([1, 2, 3]);
+  assert.deepEqual(newIdsSince(known, [1, 2, 3]), []);
+  assert.deepEqual(newIdsSince(known, [2, 3]), []); // one confirmed/declined: no chime
+  assert.deepEqual(newIdsSince(known, [2, 3, 7]), [7]);
+  assert.deepEqual(newIdsSince(new Set(), [4]), [4]);
 });

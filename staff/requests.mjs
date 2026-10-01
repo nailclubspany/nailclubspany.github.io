@@ -9,7 +9,8 @@
 // Must never import app.mjs or the supabase-js CDN — that's what keeps the
 // pure helpers importable by plain `node --test`.
 import { salonParts, formatMinutes } from '../js/schedule.mjs';
-import { say, t, tri } from './i18n.mjs';
+import { say, t, tri, fieldMessage } from './i18n.mjs';
+import { inlineErrors } from '../js/inline-errors.mjs';
 
 // --- Pure helpers ------------------------------------------------------
 
@@ -71,13 +72,18 @@ export function overlapMessage(name) {
 // labelled "(inactive)" — so pressing Confirm never silently reassigns the
 // request to whoever happens to be first in the list.
 export function confirmProviderOptions(staffRows, currentStaffId) {
-  return staffRows
+  const options = staffRows
     .filter((s) => s.active || s.id === currentStaffId)
     .map((s) => ({
       id: s.id,
       label: s.active ? s.name : `${s.name} (${t('inactive')})`,
       selected: s.id === currentStaffId,
     }));
+  // A No preference request has no provider yet: start on a blank choice
+  // (the select is required) so nobody is confirmed to the first name by
+  // accident.
+  if (currentStaffId == null) options.unshift({ id: '', label: t('Choose a provider…'), selected: true });
+  return options;
 }
 
 // Coalesces reload requests while something on screen must not be wiped
@@ -164,7 +170,7 @@ function buildCard(appt, staffNameById, staffRows) {
   provider.className = 'request-provider';
   const providerName = staffNameById.get(appt.staff_id);
   if (providerName) provider.textContent = providerName;
-  else say(provider, 'Unassigned');
+  else say(provider, 'No preference');
 
   const name = document.createElement('p');
   name.className = 'request-name';
@@ -200,6 +206,7 @@ function buildCard(appt, staffNameById, staffRows) {
   }
 
   const providerSelect = document.createElement('select');
+  providerSelect.required = true;
   for (const o of confirmProviderOptions(staffRows, appt.staff_id)) {
     const opt = document.createElement('option');
     opt.value = String(o.id);
@@ -210,6 +217,7 @@ function buildCard(appt, staffNameById, staffRows) {
 
   const confirmForm = document.createElement('form');
   confirmForm.className = 'confirm-form hidden';
+  inlineErrors(confirmForm, fieldMessage);
 
   // Held while this card's confirm form is open (see `reloads`).
   let releaseHold = null;
@@ -267,7 +275,22 @@ function buildCard(appt, staffNameById, staffRows) {
   declineBtn.type = 'button';
   declineBtn.className = 'btn btn-decline';
   say(declineBtn, 'Decline');
+  // Two taps to decline: the first arms the button ("Tap again to decline",
+  // solid red) for a few seconds; only a second tap in that time declines.
+  let disarmTimer = null;
+  const disarm = () => {
+    clearTimeout(disarmTimer);
+    declineBtn.classList.remove('armed');
+    say(declineBtn, 'Decline');
+  };
   declineBtn.addEventListener('click', async () => {
+    if (!declineBtn.classList.contains('armed')) {
+      declineBtn.classList.add('armed');
+      say(declineBtn, 'Tap again to decline');
+      disarmTimer = setTimeout(disarm, 4000);
+      return;
+    }
+    disarm();
     declineBtn.disabled = true;
     status.textContent = '';
     const { error } = await state.supabase.from('appointments').update({ status: 'declined' }).eq('id', appt.id);

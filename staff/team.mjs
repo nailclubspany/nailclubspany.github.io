@@ -16,7 +16,8 @@
 // Must never import app.mjs or the supabase-js CDN — that's what keeps
 // other view modules' pure helpers importable by plain `node --test`.
 import { createLoadSequencer } from './calendar.mjs';
-import { say } from './i18n.mjs';
+import { say, sayBriefly, t, fieldMessage } from './i18n.mjs';
+import { inlineErrors, showError, clearError } from '../js/inline-errors.mjs';
 
 const LOAD_ERROR_COPY = "Couldn't load the team — check the connection and try again.";
 const SAVE_ERROR_COPY = 'Could not save — try again.';
@@ -48,6 +49,9 @@ let status = null;
 let staffList = [];
 let skillNames = [];
 let staffServices = []; // [{staff_id, service}]
+// Id of the provider just renamed: the reload that follows rebuilds the
+// list, so the 'Saved.' confirmation is shown by renderItem instead.
+let savedId = null;
 
 const seqr = createLoadSequencer();
 
@@ -84,6 +88,7 @@ async function reload() {
   const { staff, services, staffServices: rows, error } = await loadAll();
   if (!seqr.isCurrent(seq) || !container) return;
   if (error) {
+    savedId = null;
     setStatus(LOAD_ERROR_COPY);
     return;
   }
@@ -102,6 +107,8 @@ function renameField(person) {
   nameInput.className = 'team-name-input';
   nameInput.value = person.name;
   nameInput.required = true;
+  // Not in a form, so clear its "fill this in" message here.
+  nameInput.addEventListener('input', () => clearError(nameInput));
 
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
@@ -114,7 +121,14 @@ function renameField(person) {
 
   saveBtn.addEventListener('click', async () => {
     const name = nameInput.value.trim();
-    if (!name || name === person.name) return;
+    if (!name) {
+      showError(nameInput, t('Please fill this in.'));
+      return;
+    }
+    if (name === person.name) {
+      sayBriefly(itemStatus, 'Saved.');
+      return;
+    }
     saveBtn.disabled = true;
     itemStatus.textContent = '';
     const { error } = await state.supabase.from('staff').update({ name }).eq('id', person.id);
@@ -124,6 +138,7 @@ function renameField(person) {
       nameInput.value = person.name;
       return;
     }
+    savedId = person.id;
     await reload();
   });
 
@@ -254,6 +269,10 @@ function renderItem(person, index) {
   row.append(reorderButtons(person, index, itemStatus), nameWrap, activeToggle(person, itemStatus));
 
   item.append(row, skillChecks(person, itemStatus), itemStatus);
+  if (person.id === savedId) {
+    savedId = null;
+    sayBriefly(itemStatus, 'Saved.');
+  }
   return item;
 }
 
@@ -275,6 +294,7 @@ function render() {
 function buildAddForm() {
   const form = document.createElement('form');
   form.className = 'team-add-form';
+  inlineErrors(form, fieldMessage);
 
   const label = document.createElement('label');
   label.className = 'field';
@@ -318,6 +338,7 @@ function mount(root, ctx) {
   staffList = [];
   skillNames = [];
   staffServices = [];
+  savedId = null;
 
   container = document.createElement('div');
   container.className = 'team-view';

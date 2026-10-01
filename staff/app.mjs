@@ -15,12 +15,14 @@
 // channel, its subscribe() was a no-op, and it was dropped when the leave
 // finished.)
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../js/config.mjs';
-import { createListenerSet, authAction } from './shell-support.mjs';
+import { createListenerSet, authAction, newIdsSince } from './shell-support.mjs';
+import { soundOn, setSoundOn, unlock, unlocked, playChime } from './chime.mjs';
 import requestsView from './requests.mjs';
 import calendarView from './calendar.mjs';
 import schedulesView from './schedules.mjs';
 import teamView from './team.mjs';
-import { say, LANGS, getLang, setLang } from './i18n.mjs';
+import { say, t, fieldMessage, LANGS, getLang, setLang } from './i18n.mjs';
+import { inlineErrors } from '../js/inline-errors.mjs';
 
 const NOT_SET_UP_COPY = "Live booking isn't set up yet — see supabase/README.md.";
 
@@ -59,6 +61,37 @@ function langSwitch() {
   return group;
 }
 
+// Bell button: new-request chime on (🔔) or off (🔕). Audio also needs one
+// tap on the page after each load, which the first tap anywhere handles.
+function soundButton() {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn btn-sound';
+  const refresh = () => {
+    const on = soundOn();
+    btn.textContent = on ? '🔔' : '🔕';
+    btn.title = t(on ? 'Sound on' : 'Sound off');
+    btn.setAttribute('aria-label', btn.title);
+    btn.setAttribute('aria-pressed', String(on));
+  };
+  btn.addEventListener('click', async () => {
+    const turningOn = !soundOn() || !unlocked();
+    setSoundOn(turningOn);
+    if (turningOn) {
+      await unlock();
+      playChime(); // a preview, so staff hear what to listen for
+    }
+    refresh();
+  });
+  // The first tap anywhere unlocks audio (browsers require one).
+  document.addEventListener('pointerdown', async () => {
+    await unlock();
+    refresh();
+  }, { once: true });
+  refresh();
+  return btn;
+}
+
 function renderNotice(text) {
   root.replaceChildren();
   const p = document.createElement('p');
@@ -92,6 +125,37 @@ async function init() {
   function onAvailabilityChanged(cb) {
     return availabilityListeners.add(cb);
   }
+
+  // --- New-request chime ---
+  // Ids of the pending requests already seen; null until the first check
+  // after sign-in, so requests that were already waiting don't chime.
+  let knownPending = null;
+  let pendingTimer = null;
+  let pendingGen = 0;
+
+  async function checkPending() {
+    const gen = pendingGen;
+    const { data, error } = await supabase.from('appointments').select('id').eq('status', 'pending');
+    if (error || gen !== pendingGen) return; // failed, or signed out meanwhile
+    const ids = data.map((r) => r.id);
+    if (knownPending && soundOn() && newIdsSince(knownPending, ids).length > 0) playChime();
+    knownPending = new Set(ids);
+  }
+
+  // Booking changes arrive as a burst of per-day broadcasts; check once.
+  function schedulePendingCheck() {
+    clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(checkPending, 400);
+  }
+
+  availabilityListeners.add(() => {
+    if (renderedUserId) schedulePendingCheck();
+  });
+  // Backup for broadcasts missed while the connection was down (e.g. the
+  // iPad slept): look again every minute.
+  setInterval(() => {
+    if (renderedUserId) checkPending();
+  }, 60_000);
 
   async function openAvailabilityChannel() {
     const gen = ++channelGen;
@@ -152,7 +216,7 @@ async function init() {
     signOutBtn.className = 'btn btn-signout';
     say(signOutBtn, 'Sign out');
     signOutBtn.addEventListener('click', () => supabase.auth.signOut());
-    header.append(brand, who, langSwitch(), signOutBtn);
+    header.append(brand, who, soundButton(), langSwitch(), signOutBtn);
 
     const nav = document.createElement('nav');
     nav.className = 'app-tabs';
@@ -184,6 +248,7 @@ async function init() {
 
     const form = document.createElement('form');
     form.className = 'signin-form';
+    inlineErrors(form, fieldMessage);
 
     const emailInput = document.createElement('input');
     emailInput.type = 'email';
@@ -240,12 +305,15 @@ async function init() {
     const action = authAction(renderedUserId, session);
     if (action === 'none') return; // e.g. TOKEN_REFRESHED, same-user SIGNED_IN on tab focus
     renderedUserId = session?.user?.id ?? null;
+    pendingGen += 1;
+    knownPending = null;
     teardownView();
     contentEl = null;
     if (action === 'shell') {
       closeAvailabilityChannel(); // no-op unless a different user took over
       openAvailabilityChannel();
       renderShell(session.user?.email ?? '');
+      checkPending();
     } else {
       closeAvailabilityChannel();
       renderSignIn();
