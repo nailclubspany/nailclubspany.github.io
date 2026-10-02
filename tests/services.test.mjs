@@ -65,3 +65,14 @@ test('bookingNotes caps at 1000 chars', () => {
   const lines = Array.from({ length: 10 }, () => 'x'.repeat(90));
   assert.equal(bookingNotes(lines, 'y'.repeat(600)).length, 1000);
 });
+
+test('only Massage duration is a required choice; the rest are optional', () => {
+  const required = [...NAIL_SERVICES, ...SPA_SERVICES].flatMap((s) =>
+    s.choices.filter((c) => c.required).map((c) => `${s.name}|${c.label}`));
+  assert.deepEqual(required, ['Massage|Duration']);
+});
+
+test('describePick leaves out choices the customer skipped', () => {
+  assert.equal(describePick('Spa Pedicure', {}, []), 'Spa Pedicure');
+  assert.equal(describePick('UV Gel/Hard Gel', { Length: 'Extension tips' }, ['Paraffin']), 'UV Gel/Hard Gel: Extension tips + Paraffin');
+});

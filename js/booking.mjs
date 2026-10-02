@@ -78,6 +78,7 @@ const pickedServices = () => serviceBoxes.filter((b) => b.checked).map((b) => b.
 const staticTechnicianOptions = [...technicianSelect.options].map((o) => o.cloneNode(true));
 
 const CHECKING_COPY = 'Checking availability…';
+const CHOOSE_DATE_COPY = 'Choose a date';
 const NO_OPENINGS_COPY = 'No openings that day — try another date or call (718) 392-8899.';
 const SUCCESS_COPY = "Request received — this time is held for you. We'll call or text to confirm.";
 const TAKEN_COPY = 'That time was just taken — here are the open times.';
@@ -241,9 +242,17 @@ async function refresh() {
   const mySeq = ++refreshSeq;
   const day = dateInput.value || salonToday(new Date());
   const prevPicked = lastPick;
+  // No date yet: still fetch today for the provider list, but don't offer
+  // (or report on) today's times — after hours that read "No openings".
+  const noDate = !dateInput.value;
 
-  setCheckingTime();
-  setRefreshStatus(CHECKING_COPY);
+  if (noDate) {
+    timeSelect.disabled = false;
+    timeSelect.replaceChildren(new Option(CHOOSE_DATE_COPY, ''));
+  } else {
+    setCheckingTime();
+    setRefreshStatus(CHECKING_COPY);
+  }
 
   let dayData;
   try {
@@ -270,6 +279,10 @@ async function refresh() {
 
   populateProviders(dayData);
   setRefreshStatus('');
+  if (noDate) {
+    lastPick = '';
+    return true;
+  }
 
   const earliest = earliestStart(day, new Date());
   const staffId = technicianSelect.value ? Number(technicianSelect.value) : null;

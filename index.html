@@ -165,6 +165,7 @@
   .nail-details[hidden] { display: none; }
   .nail-details .choice { border: 0; margin: 0; padding: 0; min-width: 0; }
   .nail-details .choice-label { padding: 0; margin: 0 0 6px; font-size: 13px; color: #d4d4d4; }
+  .nail-details .choice-label .optional { color: #9a9a9a; }
   .nail-details .pills { display: flex; flex-wrap: wrap; gap: 8px; }
   .services-pick .nail-details .pills label { position: relative; min-height: 36px; padding: 6px 14px; border: 1.5px solid #4a4a4a; border-radius: 999px; font-size: 14px; gap: 0; }
   .services-pick .nail-details .pills input { position: absolute; opacity: 0; width: 1px; height: 1px; }
@@ -459,9 +460,6 @@
         <p>Prefer to call? <a href="tel:+17183928899">(718) 392-8899</a></p>
       </div>
       <form id="booking-form" method="post" action="#" novalidate>
-        <label>Name<input name="name" type="text" autocomplete="name" maxlength="100" required></label>
-        <label>Phone<input name="phone" type="tel" autocomplete="tel" maxlength="30" required></label>
-        <label class="full">Email<input name="email" type="email" autocomplete="email" maxlength="254" required></label>
         <fieldset class="full services-pick">
           <legend>Services (choose one or more)</legend>
           <!-- NAIL SERVICES: rendered from js/services.mjs (edit the menu there) -->
@@ -493,6 +491,9 @@
             <option value="">Choose a time…</option>
           </select>
         </label>
+        <label>Name<input name="name" type="text" autocomplete="name" maxlength="100" required></label>
+        <label>Phone<input name="phone" type="tel" autocomplete="tel" maxlength="30" required></label>
+        <label class="full">Email<input name="email" type="email" autocomplete="email" maxlength="254" required></label>
         <label class="full">Notes (optional)<textarea name="notes" maxlength="500" placeholder="Anything we should know?"></textarea></label>
         <input type="checkbox" name="botcheck" tabindex="-1" autocomplete="off" aria-hidden="true" style="display:none">
         <div class="full"><button class="btn btn-primary" type="submit">Send request</button></div>

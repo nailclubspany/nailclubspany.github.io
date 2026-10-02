@@ -4,8 +4,9 @@
 //
 // Each service is a normal `name="service"` checkbox, so the rest of
 // js/booking.mjs treats it like any other service (availability, the RPC's
-// p_services). Under it sits a details panel with the service's required
-// choices (radio pills) and optional add-ons. The panel is a <fieldset> that
+// p_services). Under it sits a details panel with the service's choices
+// (radio pills; optional unless the choice is marked `required`, and a picked
+// pill can be tapped again to clear it) and optional add-ons. The panel is a <fieldset> that
 // is `disabled` as well as `hidden` while the service is unticked: disabled
 // controls are skipped by form validation, so an abandoned service's
 // unanswered choices never block a submit.
@@ -42,12 +43,22 @@ function buildItem(service) {
     // The radios are invisible behind the pills, so the browser's own
     // "please select" bubble is easy to miss; say it under the group instead.
     const error = el('p', { className: 'choice-error', textContent: 'Please choose one.', hidden: true });
-    const group = el('fieldset', { className: 'choice' }, el('legend', { className: 'choice-label', textContent: choice.label }), pills, error);
+    const legend = el('legend', { className: 'choice-label' }, choice.label);
+    if (!choice.required) legend.append(el('span', { className: 'optional', textContent: ' (optional)' }));
+    const group = el('fieldset', { className: 'choice' }, legend, pills, error);
     choice.options.forEach((option, i) => {
       // `required` on one radio makes the whole same-name group required.
-      const radio = el('input', { type: 'radio', name: `${service.name}|${choice.label}`, value: option, required: i === 0 });
+      const radio = el('input', { type: 'radio', name: `${service.name}|${choice.label}`, value: option, required: i === 0 && !!choice.required });
       radio.addEventListener('invalid', () => { error.hidden = false; group.classList.add('missing'); });
       radio.addEventListener('change', () => { error.hidden = true; group.classList.remove('missing'); });
+      // Radios can't be unticked, so a tap on the already-picked pill clears
+      // an optional choice. dataset.picked is cleared on form reset.
+      if (!choice.required) {
+        radio.addEventListener('click', () => {
+          if (group.dataset.picked === option) { radio.checked = false; delete group.dataset.picked; }
+          else group.dataset.picked = option;
+        });
+      }
       pills.append(el('label', {}, radio, option));
     });
     panel.append(group);
@@ -70,7 +81,10 @@ export function renderNailPicker(host, services = NAIL_SERVICES) {
   // form.reset() unticks the boxes without firing `change`, so collapse the
   // panels to match — after the reset has actually happened.
   host.closest('form')?.addEventListener('reset', () => {
-    setTimeout(() => items.forEach((item) => setOpen(item, false)), 0);
+    setTimeout(() => items.forEach((item) => {
+      setOpen(item, false);
+      for (const group of item.querySelectorAll('.choice')) delete group.dataset.picked;
+    }), 0);
   });
 }
 

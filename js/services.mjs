@@ -1,7 +1,9 @@
 // The booking form's detailed services: each nail service (and Massage), the
-// choices a customer must make for it, and the add-ons they may tick. Edit
-// this file to change the menu. A new service (or a renamed one) also needs a matching
-// services row — add it in a new supabase/migrations file — so staff can be
+// choices a customer may make for it, and the add-ons they may tick. Choices
+// are optional (many people decide in the chair) unless marked
+// `required: true` — only Massage duration, since it sets how long the visit
+// is. Edit this file to change the menu. A new service (or a renamed one)
+// also needs a matching services row — add it in a new supabase/migrations file — so staff can be
 // given it in the staff app's Team view. Choices and add-ons are details
 // only: they are not staff skills and need no database change.
 //
@@ -43,7 +45,7 @@ export const NAIL_SERVICES = [
 ];
 
 const MASSAGE_TYPE = { label: 'Massage type', options: ['Foot', 'Chair', 'Bed'] };
-const DURATION = { label: 'Duration', options: ['10 min', '15 min', '30 min', '45 min', '60 min'] };
+const DURATION = { label: 'Duration', required: true, options: ['10 min', '15 min', '30 min', '45 min', '60 min'] };
 
 // Detailed services outside Nails, shown under "Spa & more". Their names are
 // existing services rows, so no migration is needed.
