@@ -1,4 +1,6 @@
-// Wires up the public booking form (index.html #booking-form).
+// Wires up the public booking form (book/index.html #booking-form). The form
+// is shown one step at a time (js/steps.mjs) but is still one <form>: the
+// submit code below checks and sends every field, whichever step it sits on.
 //
 // Legacy mode (default): exactly today's behaviour — salon-hours time list
 // computed client-side, submitted by Web3Forms (or mailto if no key). Wired
@@ -14,16 +16,19 @@
 // (import, timeout, first public_day call, or a later RPC error) falls back
 // to (or stays in) legacy mode.
 //
-// Uses globals defined by the classic <script id="booking-logic"> in
-// index.html (function declarations there become properties of the global
+// Uses globals defined by the classic script js/booking-logic.js, loaded
+// before this module (function declarations there become properties of the global
 // object, so they're visible here as bare identifiers): buildBookingMailto,
 // buildBookingSubmission, timeSlots, weekdayOf, isPastDate, localISODate.
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.mjs';
 import { HORIZON_DAYS, salonToday, earliestStart, unknownServices, openSlots, formatMinutes, addDaysToIso } from './schedule.mjs';
 import { withTimeout, canOverwriteStatus, createGenerationalCache, resumeRefreshDue, isTestHost, phoneLooksValid } from './booking-support.mjs';
-import { renderNailPicker, serviceSummary } from './nail-picker.mjs';
-import { SPA_SERVICES, bookingNotes } from './services.mjs';
+import { renderNailPicker, renderChoices, wireOptionSections, serviceSummary } from './nail-picker.mjs';
+import { SPA_SERVICES, pickedServiceNames, bookingNotes } from './services.mjs';
 import { inlineErrors, showError } from './inline-errors.mjs';
+import { STEPS, bookingFunnel, reachedStep } from './funnel.mjs';
+import { bookingSteps } from './steps.mjs';
+import { recapRows, renderRecap } from './recap.mjs';
 
 const SALON_EMAIL = 'nailclubspany@gmail.com'; // keep in sync with Contact section
 // Web3Forms access key for SALON_EMAIL (get one free at web3forms.com). Until it's set, the form falls back to mailto.
@@ -47,6 +52,8 @@ const status = document.getElementById('booking-status');
 const dateInput = form.elements.date;
 const timeSelect = form.elements.time;
 const technicianSelect = form.elements.technician;
+// Anonymous "how far did they get" counters (see js/funnel.mjs).
+const step = bookingFunnel(form, TEST_MODE);
 // Every problem shows as text under its field (see js/inline-errors.mjs).
 const FIELD_COPY = {
   name: { valueMissing: 'Please enter your name.' },
@@ -70,9 +77,11 @@ form.elements.phone.addEventListener('blur', () => {
 });
 // Render the detailed service boxes first, so serviceBoxes below includes them.
 renderNailPicker(document.getElementById('nail-services'));
-renderNailPicker(document.getElementById('spa-services'), SPA_SERVICES);
+renderChoices(document.getElementById('spa-services'), SPA_SERVICES[0]);
+// Whether the details screen has anything to ask for the services ticked so far.
+const hasOptions = wireOptionSections(form);
 const serviceBoxes = [...form.querySelectorAll('input[name="service"]')];
-const pickedServices = () => serviceBoxes.filter((b) => b.checked).map((b) => b.value);
+const pickedServices = () => pickedServiceNames(serviceBoxes.filter((b) => b.checked).map((b) => b.value));
 // Snapshot of the static Mia/Yoyo/Carmela/Lili/Linda <option>s, before live mode ever
 // replaces them with staff ids — restored if a later fallback to legacy mode happens.
 const staticTechnicianOptions = [...technicianSelect.options].map((o) => o.cloneNode(true));
@@ -80,7 +89,7 @@ const staticTechnicianOptions = [...technicianSelect.options].map((o) => o.clone
 const CHECKING_COPY = 'Checking availability…';
 const CHOOSE_DATE_COPY = 'Choose a date';
 const NO_OPENINGS_COPY = 'No openings that day — try another date or call (718) 392-8899.';
-const SUCCESS_COPY = "Request received — this time is held for you. We'll call or text to confirm.";
+const SUCCESS_COPY = "Request received — this time is held for you. We'll confirm by phone or email.";
 const TAKEN_COPY = 'That time was just taken — here are the open times.';
 const TOO_MANY_COPY = 'You already have 3 requests waiting — please call (718) 392-8899.';
 const PHONE_COPY = 'Please enter a 10-digit phone number, including area code.';
@@ -96,6 +105,69 @@ const REFRESH_OWN_MESSAGES = [CHECKING_COPY, NO_OPENINGS_COPY];
 function setRefreshStatus(text) {
   if (canOverwriteStatus(status.textContent, REFRESH_OWN_MESSAGES)) status.textContent = text;
 }
+
+// Checks the browser can't express with attributes. Run before any step's
+// fields are checked (Next) and again before a submit (Send).
+function applyCustomChecks() {
+  const phone = form.elements.phone;
+  dateInput.setCustomValidity(dateInput.value && isPastDate(dateInput.value, new Date()) ? 'Please choose today or a future date.' : '');
+  phone.setCustomValidity(!phone.value.trim() || phoneLooksValid(phone.value) ? '' : PHONE_COPY);
+  serviceBoxes[0].setCustomValidity(pickedServices().length ? '' : 'Please choose at least one service.');
+}
+
+// What the customer has picked so far, as they saw it, for the recap.
+function readPicks() {
+  const f = form.elements;
+  return {
+    services: serviceSummary(form).detailLines,
+    provider: f.technician.value ? f.technician.selectedOptions[0].textContent : '',
+    date: f.date.value,
+    time: f.time.value ? f.time.selectedOptions[0].textContent : '',
+  };
+}
+
+// The form's screens (see book/index.html): 1 services, 2 their optional
+// details, 3 date and time, 4 contact details.
+const DETAILS_SCREEN = 2;
+const TIME_SCREEN = 3;
+const CONTACT_SCREEN = 4;
+const steps = bookingSteps(form, {
+  beforeValidate: applyCustomChecks,
+  skip: (n) => n === DETAILS_SCREEN && !hasOptions(),
+  onShow(n) {
+    if (n === DETAILS_SCREEN) step(STEPS.detailsReached);
+    if (n === TIME_SCREEN) {
+      step(reachedStep(2));
+      document.getElementById('recap-services').textContent = serviceSummary(form).names.join(', ');
+    }
+    if (n === CONTACT_SCREEN) {
+      step(reachedStep(3));
+      renderRecap(document.getElementById('recap'), recapRows(readPicks()), (to) => steps.go(to));
+    }
+  },
+});
+
+// The request went through: swap the form for the confirmation screen.
+// `rows` is the recap as read before the form was reset.
+const done = document.getElementById('booking-done');
+const aroundForm = [form, ...document.querySelectorAll('.progress, .book-intro')];
+function finish(message, rows) {
+  document.getElementById('booking-done-message').textContent = message;
+  renderRecap(document.getElementById('booking-done-recap'), rows);
+  for (const el of aroundForm) el.hidden = true;
+  done.hidden = false;
+  history.replaceState(null, '', '#done');
+  scrollTo(0, 0);
+  done.focus({ preventScroll: true });
+}
+// Back from the confirmation screen starts a fresh request (js/steps.mjs
+// then shows step 1, as the form was reset).
+addEventListener('popstate', () => {
+  if (done.hidden) return;
+  done.hidden = true;
+  for (const el of aroundForm) el.hidden = false;
+  status.textContent = '';
+});
 
 let supabase = null;
 let channel = null;
@@ -159,13 +231,11 @@ function enterLegacyMode() {
     f.name.value = f.name.value.trim();
     f.phone.value = f.phone.value.trim();
     f.email.value = f.email.value.trim();
-    if (dateInput.value && isPastDate(dateInput.value, new Date())) {
-      dateInput.setCustomValidity('Please choose today or a future date.');
-    }
-    f.phone.setCustomValidity(!f.phone.value || phoneLooksValid(f.phone.value) ? '' : PHONE_COPY);
-    serviceBoxes[0].setCustomValidity(pickedServices().length ? '' : 'Please choose at least one service.');
+    step(STEPS.sendTapped);
+    applyCustomChecks();
     if (!form.reportValidity()) return;
 
+    const rows = recapRows(readPicks());
     const data = {
       name: f.name.value,
       phone: f.phone.value,
@@ -189,7 +259,7 @@ function enterLegacyMode() {
       console.log('Test mode — not emailed:', buildBookingSubmission(data, WEB3FORMS_KEY));
       form.reset();
       fillTimes();
-      status.textContent = `Test mode — not emailed: ${data.service} · ${data.date} ${data.time}`;
+      finish(`Test mode — not emailed: ${data.service} · ${data.date} ${data.time}`, rows);
       return;
     }
 
@@ -206,9 +276,12 @@ function enterLegacyMode() {
       if (!result.success) throw new Error(result.message);
       form.reset();
       fillTimes();
-      status.textContent = "Thanks! Your request was sent. We'll contact you to confirm.";
+      status.textContent = '';
+      finish(EMAILED_COPY, rows);
+      step(STEPS.sentByEmail);
     } catch {
       status.textContent = ERROR_COPY;
+      step(STEPS.failed);
     } finally {
       button.disabled = false;
     }
@@ -322,7 +395,11 @@ function refreshChosenDay() {
     // never fires; `!submitting` is a second, cheap guard for the same
     // race. Either way, a customer must never see "just taken" for their
     // own successful request.
-    if (applied && hadPick && lastPick !== hadPick && !submitting) status.textContent = TAKEN_COPY;
+    if (applied && hadPick && lastPick !== hadPick && !submitting) {
+      // A customer already past the date and time screen goes back to the open times.
+      if (steps.current > TIME_SCREEN) steps.go(TIME_SCREEN);
+      status.textContent = TAKEN_COPY;
+    }
   });
 }
 
@@ -393,11 +470,8 @@ function enterLiveMode() {
     f.name.value = f.name.value.trim();
     f.phone.value = f.phone.value.trim();
     f.email.value = f.email.value.trim();
-    if (dateInput.value && isPastDate(dateInput.value, new Date())) {
-      dateInput.setCustomValidity('Please choose today or a future date.');
-    }
-    f.phone.setCustomValidity(!f.phone.value || phoneLooksValid(f.phone.value) ? '' : PHONE_COPY);
-    serviceBoxes[0].setCustomValidity(pickedServices().length ? '' : 'Please choose at least one service.');
+    step(STEPS.sendTapped);
+    applyCustomChecks();
     if (!form.reportValidity()) return;
     if (f.botcheck.checked) return; // honeypot: only bots tick the hidden box
 
@@ -408,6 +482,7 @@ function enterLiveMode() {
     // Read the picks now: the customer can still change the form while the
     // RPC is in flight, and the email must describe what was booked.
     const summary = serviceSummary(form);
+    const rows = recapRows(readPicks());
     const notes = f.notes.value.trim();
     // Transition period: the salon gets an email for EVERY request, whatever
     // happens online — marked held, or NOT saved online with the reason.
@@ -443,6 +518,7 @@ function enterLiveMode() {
 
       if (data?.ok) {
         saved = true;
+        step(STEPS.held);
         // Clear synchronously, with no await in between, so the realtime
         // broadcast our own insert triggers (racing this same refresh) can
         // never see a "held pick" for this booking and show TAKEN_COPY for
@@ -450,20 +526,23 @@ function enterLiveMode() {
         // this runs before that broadcast's handler can.
         lastPick = '';
         form.reset();
+        status.textContent = '';
+        finish(TEST_MODE ? `${SUCCESS_COPY} (Test mode — not emailed.)` : SUCCESS_COPY, rows);
         // Fire-and-forget: staff copy only, the RPC already holds the slot.
         emailSalon({ ...emailData, technician: data.staff_name ?? 'No preference' }, true);
         dayAvailability.invalidate(day);
         await refresh();
-        // Set after refresh so it isn't cleared by refresh's own '' write.
-        status.textContent = TEST_MODE ? `${SUCCESS_COPY} (Test mode — not emailed.)` : SUCCESS_COPY;
       } else if (data?.reason === 'slot_taken') {
+        step(STEPS.timeTaken);
         emailSalon(emailData, 'NOT saved online — that time was just taken; the customer was shown the open times and may send another request.');
         // Also covers a slot that aged inside the lead time (or past the
         // horizon) while the form was open: refetch and show what's open.
         dayAvailability.invalidate(day);
         await refresh();
+        steps.go(TIME_SCREEN);
         status.textContent = TAKEN_COPY;
       } else if (data?.reason === 'too_many') {
+        step(STEPS.tooMany);
         emailSalon(emailData, 'NOT saved online — this phone number already has 3 pending requests. Call the customer.');
         status.textContent = TOO_MANY_COPY;
       } else {
@@ -471,15 +550,21 @@ function enterLiveMode() {
       }
     } catch {
       if (saved) {
-        // Only the after-booking refresh failed; the request is held.
-        status.textContent = SUCCESS_COPY;
+        // Only the after-booking refresh failed; the request is held and the
+        // confirmation screen is already showing.
         return;
       }
       // The booking system failed, but the salon still gets the request by
       // email; tell the customer it arrived only if that email went through.
       const emailed = await emailSalon(emailData, 'NOT saved online — the booking system had a problem. Call the customer to confirm.');
-      status.textContent = emailed ? EMAILED_COPY : ERROR_COPY;
-      if (emailed) form.reset();
+      step(emailed ? STEPS.emailedNotSaved : STEPS.failed);
+      if (emailed) {
+        form.reset();
+        status.textContent = '';
+        finish(EMAILED_COPY, rows);
+      } else {
+        status.textContent = ERROR_COPY;
+      }
     } finally {
       submitting = false;
       button.disabled = false;

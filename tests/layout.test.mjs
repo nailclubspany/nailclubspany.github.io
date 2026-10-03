@@ -6,12 +6,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-// Renders the page in headless Edge at phone widths and checks nothing is wider than the screen.
+// Renders each page in headless Edge at phone widths and checks nothing is wider than the screen.
+// (Opened as files, so module scripts don't run: book/ is measured with its static markup only.)
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-const PAGE = pathToFileURL(fileURLToPath(new URL('../index.html', import.meta.url))).href;
+const PAGES = ['index.html', 'book/index.html'];
+const pageUrl = (page) => pathToFileURL(fileURLToPath(new URL(`../${page}`, import.meta.url))).href;
 const WIDTHS = [320, 360, 375, 390, 414];
 
-function measure() {
+function measure(page) {
   const dir = mkdtempSync(join(tmpdir(), 'ncs-layout-'));
   const harness = join(dir, 'measure.html');
   writeFileSync(harness, `<!doctype html><meta charset="utf-8"><body style="margin:0"><script>
@@ -19,7 +21,7 @@ function measure() {
     function next() {
       if (i >= widths.length) { document.title = JSON.stringify(out); return; }
       const w = widths[i++]; const f = document.createElement('iframe');
-      f.style.cssText = 'width:' + w + 'px;height:800px;border:0'; f.src = ${JSON.stringify(PAGE)};
+      f.style.cssText = 'width:' + w + 'px;height:800px;border:0'; f.src = ${JSON.stringify(pageUrl(page))};
       f.onload = () => setTimeout(() => {
         const d = f.contentDocument, W = f.contentWindow.innerWidth;
         out[w] = { scrollWidth: d.documentElement.scrollWidth, viewport: W,
@@ -38,8 +40,8 @@ function measure() {
   return JSON.parse(title);
 }
 
-test('no horizontal scroll at common phone widths', { skip: !existsSync(EDGE) && 'Edge not installed' }, () => {
-  const results = measure();
+for (const page of PAGES) test(`${page}: no horizontal scroll at common phone widths`, { skip: !existsSync(EDGE) && 'Edge not installed' }, () => {
+  const results = measure(page);
   for (const w of WIDTHS) {
     const r = results[w];
     assert.ok(r.scrollWidth <= r.viewport, `${w}px: page is ${r.scrollWidth}px wide; overflowing: ${r.over.join(', ')}`);

@@ -3,11 +3,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-const match = html.match(/<script id="booking-logic">([\s\S]*?)<\/script>/);
-assert.ok(match, 'index.html must contain <script id="booking-logic">');
+// The pure helpers both pages load as a classic script.
+const logic = readFileSync(new URL('../js/booking-logic.js', import.meta.url), 'utf8');
 const ctx = vm.createContext({});
-vm.runInContext(match[1], ctx);
+vm.runInContext(logic, ctx);
 const { buildBookingMailto, buildBookingSubmission, localISODate, isPastDate } = ctx;
 
 const TO = 'nailclubspany@gmail.com';

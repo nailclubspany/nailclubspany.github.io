@@ -1,8 +1,9 @@
 // The booking form's detailed services: each nail service (and Massage), the
 // choices a customer may make for it, and the add-ons they may tick. Choices
 // are optional (many people decide in the chair) unless marked
-// `required: true` — only Massage duration, since it sets how long the visit
-// is. Edit this file to change the menu. A new service (or a renamed one)
+// `required: true` — none are today. The nail services themselves are
+// optional too: the form's first screen has one "Nails" box, and its details
+// screen then offers them (see NAIL_GROUP). Edit this file to change the menu. A new service (or a renamed one)
 // also needs a matching services row — add it in a new supabase/migrations file — so staff can be
 // given it in the staff app's Team view. Choices and add-ons are details
 // only: they are not staff skills and need no database change.
@@ -45,13 +46,25 @@ export const NAIL_SERVICES = [
 ];
 
 const MASSAGE_TYPE = { label: 'Massage type', options: ['Foot', 'Chair', 'Bed'] };
-const DURATION = { label: 'Duration', required: true, options: ['10 min', '15 min', '30 min', '45 min', '60 min'] };
+const DURATION = { label: 'Duration', options: ['10 min', '15 min', '30 min', '45 min', '60 min'] };
 
 // Detailed services outside Nails, shown under "Spa & more". Their names are
 // existing services rows, so no migration is needed.
 export const SPA_SERVICES = [
   { name: 'Massage', choices: [MASSAGE_TYPE, DURATION], addOns: [] },
 ];
+
+// The form's single "Nails" box. It is a services row of its own (the
+// general nail skill), so a customer who ticks it without choosing a specific
+// nail service is booked for "Nails" and staff sort out the rest.
+export const NAIL_GROUP = 'Nails';
+
+// The service names to book from the ticked boxes: once a specific nail
+// service is ticked, it stands in for the general "Nails" entry.
+export function pickedServiceNames(checked) {
+  const specific = checked.some((name) => NAIL_SERVICES.some((s) => s.name === name));
+  return specific ? checked.filter((name) => name !== NAIL_GROUP) : checked;
+}
 
 // One line describing a picked service for staff, e.g.
 // 'Gel X: Fill, Chrome + Paraffin'. `choices` maps a choice label to the

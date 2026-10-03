@@ -1,16 +1,142 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Book a visit | The Nail Club &amp; Spa</title>
-<!-- Short link for places (like the Google Maps app) that break "/#book". -->
-<meta name="robots" content="noindex">
-<link rel="canonical" href="https://nailclubspany.github.io/#book">
-<meta http-equiv="refresh" content="0; url=/#book">
-<!-- Keeps ?utm_source=… so GoatCounter credits the visit to where the link was posted. -->
-<script>location.replace('/' + location.search + '#book');</script>
+<meta name="description" content="Book nails, massage, head spa or lashes at The Nail Club & Spa in Sunnyside, Queens. Pick your services, a day and a time.">
+<!-- One official address, so ?utm_source=… and ?rwg_token=… (Google Maps Book button) count as "/book/" in GoatCounter -->
+<link rel="canonical" href="https://nailclubspany.github.io/book/">
+<link rel="icon" href="../photos/logo.png?v=2" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../site.css">
 </head>
 <body>
-<p><a href="/#book">Book a visit</a></p>
+
+<header>
+  <div class="wrap">
+    <a class="brand" href="../"><img src="../photos/logo.png?v=2" alt="" width="50" height="46"><span>The Nail Club <span class="amp">&amp;</span> Spa</span></a>
+    <nav>
+      <a href="../#prices">Prices</a>
+      <a href="../#contact">Contact</a>
+    </nav>
+  </div>
+</header>
+
+<main id="booking" class="book book-page">
+  <div class="wrap book-wrap">
+    <p class="eyebrow">Appointments</p>
+    <h1>Book a visit</h1>
+    <!-- PHONE -->
+    <p class="book-intro">We'll confirm your time by phone or email. Walk-ins are always welcome. Prefer to call? <a href="tel:+17183928899">(718) 392-8899</a></p>
+
+    <!-- The three steps of the form below; js/steps.mjs marks the current one -->
+    <ol class="progress" aria-label="Booking steps">
+      <li data-step-label="1" aria-current="step">1. Services</li>
+      <li data-step-label="2">2. Date &amp; time</li>
+      <li data-step-label="3">3. Your details</li>
+    </ol>
+
+    <!-- One form, shown one screen at a time (four screens under the three steps: Services has a details screen). Hidden steps stay part of the form, so Send still checks every field. -->
+    <form id="booking-form" method="post" action="#" novalidate>
+      <div class="step" data-step="1" data-progress="1" role="group" aria-labelledby="step-1-title">
+        <h2 id="step-1-title" tabindex="-1">Choose your services</h2>
+        <fieldset class="services-pick">
+          <legend>Choose one or more</legend>
+          <!-- Nails and Massage have optional details, asked on the next screen -->
+          <label><input type="checkbox" name="service" value="Nails"> Nails</label>
+          <label><input type="checkbox" name="service" value="Massage"> Massage</label>
+          <label><input type="checkbox" name="service" value="Head Spa"> Head Spa</label>
+          <label><input type="checkbox" name="service" value="Eyelash Extensions"> Eyelash Extensions</label>
+          <label><input type="checkbox" name="service" value="Facials"> Facials</label>
+          <label><input type="checkbox" name="service" value="Waxing"> Waxing</label>
+          <label class="full"><input type="checkbox" name="service" value="$38 Bundle: Regular Mani + Pedi"> $38 Bundle: Regular Mani + Pedi</label>
+          <label><input type="checkbox" name="service" value="Other"> Other</label>
+        </fieldset>
+      </div>
+
+      <!-- Optional details for the services picked above; skipped when none of them has any (js/booking.mjs) -->
+      <div class="step" data-step="2" data-progress="1" role="group" aria-labelledby="step-2-title" hidden>
+        <h2 id="step-2-title" tabindex="-1">Any details?</h2>
+        <p class="recap-line">All optional. Skip anything you'd rather decide at the salon.</p>
+        <fieldset class="services-pick option-group" data-options-for="Nails" hidden disabled>
+          <legend>Nails: which services?</legend>
+          <!-- NAIL SERVICES: rendered from js/services.mjs (edit the menu there) -->
+          <div id="nail-services" class="nail-group-list"></div>
+        </fieldset>
+        <fieldset class="services-pick option-group" data-options-for="Massage" hidden disabled>
+          <legend>Massage</legend>
+          <!-- MASSAGE: type and duration, rendered from js/services.mjs (SPA_SERVICES) -->
+          <div id="spa-services"></div>
+        </fieldset>
+      </div>
+
+      <div class="step" data-step="3" data-progress="2" role="group" aria-labelledby="step-3-title" hidden>
+        <h2 id="step-3-title" tabindex="-1">When would you like to come?</h2>
+        <p id="recap-services" class="recap-line"></p>
+        <div class="step-fields">
+          <!-- TECHNICIANS: static fallback for legacy mode; js/booking.mjs replaces these with live staff when configured -->
+          <label class="full">Provider (optional)
+            <select name="technician">
+              <option value="">No preference</option>
+              <option>Mia</option>
+              <option>Yoyo</option>
+              <option>Carmela</option>
+              <option>Lili</option>
+              <option>Linda</option>
+            </select>
+          </label>
+          <label>Preferred date<input name="date" type="date" required></label>
+          <label>Preferred time
+            <select name="time" required>
+              <option value="">Choose a time…</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="step" data-step="4" data-progress="3" role="group" aria-labelledby="step-4-title" hidden>
+        <h2 id="step-4-title" tabindex="-1">Your details</h2>
+        <dl id="recap" class="recap"></dl>
+        <div class="step-fields">
+          <label>Name<input name="name" type="text" autocomplete="name" maxlength="100" required></label>
+          <label>Phone<input name="phone" type="tel" autocomplete="tel" maxlength="30" required></label>
+          <label class="full">Email<input name="email" type="email" autocomplete="email" maxlength="254" required></label>
+          <label class="full">Notes (optional)<textarea name="notes" rows="1" maxlength="500" placeholder="Anything we should know?"></textarea></label>
+          <input type="checkbox" name="botcheck" tabindex="-1" autocomplete="off" aria-hidden="true" style="display:none">
+        </div>
+      </div>
+
+      <!-- Pinned to the bottom of the screen, so the status line and buttons are always in view -->
+      <div class="step-bar">
+        <p id="booking-status" role="status" aria-live="polite"></p>
+        <div class="step-buttons">
+          <button class="btn btn-back" type="button" data-back hidden>Back</button>
+          <button class="btn btn-primary" type="button" data-next>Next</button>
+          <button class="btn btn-primary" type="submit" data-send hidden>Send request</button>
+        </div>
+      </div>
+    </form>
+
+    <!-- Shown in place of the form once a request has gone through -->
+    <div id="booking-done" tabindex="-1" hidden>
+      <div class="tick" aria-hidden="true">✓</div>
+      <h2>Thank you!</h2>
+      <p id="booking-done-message"></p>
+      <dl id="booking-done-recap" class="recap"></dl>
+      <div class="done-actions">
+        <a class="btn btn-primary" href="../">Back to the homepage</a>
+        <a class="btn btn-ghost" href="tel:+17183928899">Call (718) 392-8899</a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="../js/booking-logic.js"></script>
+<script type="module" src="../js/booking.mjs"></script>
+<script data-goatcounter="https://nailclubspany.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
 </body>
 </html>

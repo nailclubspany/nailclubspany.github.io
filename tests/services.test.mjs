@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NAIL_SERVICES, SPA_SERVICES, describePick, bookingNotes } from '../js/services.mjs';
+import { NAIL_SERVICES, SPA_SERVICES, NAIL_GROUP, pickedServiceNames, describePick, bookingNotes } from '../js/services.mjs';
 
 test('catalog names match the migration', () => {
   assert.deepEqual(NAIL_SERVICES.map((s) => s.name), [
@@ -66,13 +66,29 @@ test('bookingNotes caps at 1000 chars', () => {
   assert.equal(bookingNotes(lines, 'y'.repeat(600)).length, 1000);
 });
 
-test('only Massage duration is a required choice; the rest are optional', () => {
+test('every choice is optional, Massage duration included', () => {
   const required = [...NAIL_SERVICES, ...SPA_SERVICES].flatMap((s) =>
     s.choices.filter((c) => c.required).map((c) => `${s.name}|${c.label}`));
-  assert.deepEqual(required, ['Massage|Duration']);
+  assert.deepEqual(required, []);
 });
 
 test('describePick leaves out choices the customer skipped', () => {
   assert.equal(describePick('Spa Pedicure', {}, []), 'Spa Pedicure');
   assert.equal(describePick('UV Gel/Hard Gel', { Length: 'Extension tips' }, ['Paraffin']), 'UV Gel/Hard Gel: Extension tips + Paraffin');
+});
+
+// --- the Nails group ---------------------------------------------------------
+
+test('Nails on its own is sent as the general Nails service', () => {
+  assert.equal(NAIL_GROUP, 'Nails');
+  assert.deepEqual(pickedServiceNames(['Nails']), ['Nails']);
+  assert.deepEqual(pickedServiceNames(['Nails', 'Waxing']), ['Nails', 'Waxing']);
+  assert.equal(describePick('Nails', {}, []), 'Nails');
+});
+
+test('picking specific nail services replaces the general Nails entry', () => {
+  assert.deepEqual(pickedServiceNames(['Nails', 'Gel X', 'Pedicure', 'Massage']), ['Gel X', 'Pedicure', 'Massage']);
+  // The $38 bundle and Massage are not nail-group services, so Nails stays.
+  assert.deepEqual(pickedServiceNames(['Nails', 'Massage', '$38 Bundle: Regular Mani + Pedi']), ['Nails', 'Massage', '$38 Bundle: Regular Mani + Pedi']);
+  assert.deepEqual(pickedServiceNames([]), []);
 });

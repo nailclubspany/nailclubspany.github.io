@@ -51,7 +51,7 @@ test('canOverwriteStatus allows overwriting one of its own messages', () => {
 });
 
 test('canOverwriteStatus refuses to overwrite a submit-outcome message', () => {
-  assert.equal(canOverwriteStatus("Request received — this time is held for you. We'll call or text to confirm.", OWN), false);
+  assert.equal(canOverwriteStatus("Request received — this time is held for you. We'll confirm by phone or email.", OWN), false);
   assert.equal(canOverwriteStatus('That time was just taken — here are the open times.', OWN), false);
   assert.equal(canOverwriteStatus('Sending your request…', OWN), false);
 });

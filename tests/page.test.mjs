@@ -3,16 +3,22 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+// The booking form has its own page; both pages share one stylesheet.
+const book = readFileSync(new URL('../book/index.html', import.meta.url), 'utf8');
+const css = readFileSync(new URL('../site.css', import.meta.url), 'utf8');
 
 function field(name) {
-  const m = html.match(new RegExp(`<(input|select|textarea)[^>]*name="${name}"[^>]*>`));
+  const m = book.match(new RegExp(`<(input|select|textarea)[^>]*name="${name}"[^>]*>`));
   assert.ok(m, `form field "${name}" exists`);
   return m[0];
 }
 
 test('page has every section and form hook', () => {
-  for (const id of ['services', 'book', 'hours', 'contact', 'booking-form', 'booking-status']) {
+  for (const id of ['services', 'book', 'hours', 'contact']) {
     assert.match(html, new RegExp(`id="${id}"`), `missing id="${id}"`);
+  }
+  for (const id of ['booking-form', 'booking-status', 'booking-done']) {
+    assert.match(book, new RegExp(`id="${id}"`), `book/ is missing id="${id}"`);
   }
 });
 
@@ -35,7 +41,7 @@ test('required booking fields are required; notes is optional', () => {
 });
 
 test('all services and bundles are listed', () => {
-  assert.match(html, /id="nail-services"/, 'nail picker host');
+  assert.match(book, /id="nail-services"/, 'nail picker host');
   for (const s of ['Massage', 'Head Spa', 'Eyelash Extensions', 'Facials', 'Waxing',
                    'Regular Mani + Pedi', '$38']) {
     assert.ok(html.includes(s), `missing "${s}"`);
@@ -65,8 +71,8 @@ test('package deals match the salon sign and the featured offer links to them', 
   assert.ok(offer.includes('href="#bundles"'), 'featured offer links to the package deals');
 });
 
-test('short links /prices/ and /book/ redirect to their section and keep the utm tag', () => {
-  for (const [dir, id] of [['prices', 'prices'], ['book', 'book']]) {
+test('short link /prices/ redirects to its section and keeps the utm tag', () => {
+  for (const [dir, id] of [['prices', 'prices']]) {
     const page = readFileSync(new URL(`../${dir}/index.html`, import.meta.url), 'utf8');
     assert.ok(html.includes(`id="${id}"`), `homepage has #${id}`);
     assert.ok(page.includes(`location.replace('/' + location.search + '#${id}')`), `${dir}/ keeps the query`);
@@ -93,7 +99,7 @@ const contrast = (a, b) => {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (hi + 0.05) / (lo + 0.05);
 };
-const cssVar = (name) => html.match(new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, 'i'))[1];
+const cssVar = (name) => css.match(new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, 'i'))[1];
 
 test('accent text meets WCAG AA (4.5:1) on white and on the soft background', () => {
   assert.ok(contrast(cssVar('accent'), '#ffffff') >= 4.5, `accent on white ${contrast(cssVar('accent'), '#ffffff').toFixed(2)}`);
@@ -101,13 +107,13 @@ test('accent text meets WCAG AA (4.5:1) on white and on the soft background', ()
 });
 
 test('Send request button keeps 4.5:1 white text at rest and on hover', () => {
-  const hover = html.match(/\.book \.btn-primary:hover\s*\{[^}]*background:\s*(#[0-9a-f]{6}|var\(--[a-z-]+\))/i)[1];
+  const hover = css.match(/\.book \.btn-primary:hover\s*\{[^}]*background:\s*(#[0-9a-f]{6}|var\(--[a-z-]+\))/i)[1];
   const hoverHex = hover.startsWith('var') ? cssVar(hover.slice(6, -1)) : hover;
   assert.ok(contrast(hoverHex, '#ffffff') >= 4.5, `hover ${contrast(hoverHex, '#ffffff').toFixed(2)}`);
 });
 
 test('Contact anchor clears the sticky header', () => {
-  assert.match(html, /#contact\s*\{[^}]*scroll-margin-top/);
+  assert.match(css, /#contact\s*\{[^}]*scroll-margin-top/);
 });
 
 test('Instagram gallery: every photo exists, is described, lazy-loads, and links to Instagram', () => {
@@ -150,7 +156,7 @@ test('logo shows in the header and as the browser tab icon', () => {
 });
 
 test('technician dropdown is optional and offers No preference, Mia, Yoyo, Carmela, Lili, Linda', () => {
-  const select = html.match(/<select[^>]*name="technician"[^>]*>([\s\S]*?)<\/select>/);
+  const select = book.match(/<select[^>]*name="technician"[^>]*>([\s\S]*?)<\/select>/);
   assert.ok(select, 'missing technician select');
   assert.doesNotMatch(select[0].split('>')[0], /\srequired/);
   const options = [...select[1].matchAll(/<option(?: value="([^"]*)")?>([^<]*)<\/option>/g)]
@@ -158,8 +164,12 @@ test('technician dropdown is optional and offers No preference, Mia, Yoyo, Carme
   assert.deepEqual(options, ['|No preference', 'Mia|Mia', 'Yoyo|Yoyo', 'Carmela|Carmela', 'Lili|Lili', 'Linda|Linda']);
 });
 
-test('booking script is a module loaded from js/booking.mjs', () => {
-  assert.ok(html.includes('<script type="module" src="js/booking.mjs"></script>'));
+test('booking script is a module loaded from js/booking.mjs, after the helpers it uses', () => {
+  assert.ok(book.includes('<script type="module" src="../js/booking.mjs"></script>'));
+  assert.ok(book.indexOf('<script src="../js/booking-logic.js"></script>') > -1, 'book/ loads js/booking-logic.js');
+  assert.ok(book.indexOf('src="../js/booking-logic.js"') < book.indexOf('src="../js/booking.mjs"'));
+  assert.ok(html.includes('<script src="js/booking-logic.js"></script>'), 'homepage needs it for the open/closed status');
+  assert.ok(!html.includes('booking.mjs'), 'the homepage no longer wires a form');
   assert.ok(existsSync(new URL('../js/booking.mjs', import.meta.url)), 'js/booking.mjs must exist');
 });
 
@@ -174,28 +184,29 @@ test('booking form has a required email field', () => {
   assert.match(email, /type="email"/);
   assert.match(email, /autocomplete="email"/);
   assert.match(email, /\srequired/);
-  assert.ok(html.includes('>Email<input name="email"'), 'label is plain "Email", not "(optional)"');
+  assert.ok(book.includes('>Email<input name="email"'), 'label is plain "Email", not "(optional)"');
 });
 
 test('hero shows a large logo beside the name', () => {
   const hero = html.match(/<section class="hero">[\s\S]*?<\/section>/)[0];
   assert.match(hero, /<img[^>]*class="hero-logo"[^>]*src="photos\/logo\.png(\?v=\d+)?"[^>]*alt=""/);
-  assert.match(html, /\.hero-logo\s*\{[^}]*width:/);
+  assert.match(css, /\.hero-logo\s*\{[^}]*width:/);
 });
 
 test('services are checkboxes, one per service, none individually required', () => {
-  const boxes = [...html.matchAll(/<input type="checkbox" name="service" value="([^"]+)"[^>]*>/g)];
+  const boxes = [...book.matchAll(/<input type="checkbox" name="service" value="([^"]+)"[^>]*>/g)];
+  // The first screen offers the top-level services only.
   assert.deepEqual(boxes.map((m) => m[1]), [
-    'Head Spa', 'Eyelash Extensions', 'Facials', 'Waxing',
+    'Nails', 'Massage', 'Head Spa', 'Eyelash Extensions', 'Facials', 'Waxing',
     '$38 Bundle: Regular Mani + Pedi', 'Other',
   ]);
-  // Nail services render from js/services.mjs into #nail-services, and
-  // Massage (with its type and duration) into #spa-services; the old
-  // catch-all Nails box is gone.
-  assert.match(html, /id="spa-services"/);
-  assert.doesNotMatch(html, /value="Nails"/);
+  // The specific nail services render from js/services.mjs into
+  // #nail-services, and Massage's type and duration into #spa-services, on
+  // the details screen — each in a section tied to its first-screen box.
+  assert.match(book, /<fieldset[^>]*data-options-for="Nails" hidden disabled>[\s\S]*?id="nail-services"/);
+  assert.match(book, /<fieldset[^>]*data-options-for="Massage" hidden disabled>[\s\S]*?id="spa-services"/);
   for (const [tag] of boxes) assert.doesNotMatch(tag, /\srequired/);
-  assert.doesNotMatch(html, /<select[^>]*name="service"/);
+  assert.doesNotMatch(book, /<select[^>]*name="service"/);
 });
 
 test('price list: every category, sample prices, nav link, and the original menus', () => {
@@ -224,7 +235,7 @@ test('price list: every category, sample prices, nav link, and the original menu
 });
 
 test('booking form never falls back to a GET (no PII in the URL)', () => {
-  const form = html.match(/<form id="booking-form"[^>]*>/);
+  const form = book.match(/<form id="booking-form"[^>]*>/);
   assert.ok(form, 'booking form exists');
   assert.match(form[0], /\smethod="post"/);
   assert.match(form[0], /\saction="#"/);
@@ -244,5 +255,55 @@ test('booking form errors show inline (not just the browser bubble)', () => {
   const js = readFileSync(new URL('../js/booking.mjs', import.meta.url), 'utf8');
   assert.match(js, /import \{ inlineErrors, showError \} from '\.\/inline-errors\.mjs';/);
   assert.match(js, /inlineErrors\(form,/);
-  assert.match(html, /\.field-error \{/);
+  assert.match(css, /\.field-error \{/);
+});
+
+// --- the booking page (book/index.html) and how the homepage hands over to it ---
+
+test('homepage has no booking form; hero, menu and booking section link to /book/', () => {
+  assert.doesNotMatch(html, /<form/);
+  assert.equal((html.match(/href="book\/"/g) || []).length, 3, 'hero button, menu link, booking section button');
+  const section = html.match(/<section id="book"[\s\S]*?<\/section>/)[0];
+  assert.match(section, /<a class="btn btn-primary" href="book\/">Book a visit<\/a>/);
+  assert.ok(section.includes('href="tel:+17183928899"'), 'the phone number stays in the section');
+});
+
+test('both pages use the shared stylesheet and carry no inline <style>', () => {
+  assert.ok(html.includes('<link rel="stylesheet" href="site.css">'));
+  assert.ok(book.includes('<link rel="stylesheet" href="../site.css">'));
+  assert.doesNotMatch(html, /<style/);
+  assert.doesNotMatch(book, /<style/);
+});
+
+test('/book/ is a real page: canonical, counted by GoatCounter, not hidden from search', () => {
+  assert.ok(book.includes('<link rel="canonical" href="https://nailclubspany.github.io/book/">'));
+  assert.ok(book.includes('data-goatcounter="https://nailclubspany.goatcounter.com/count"'));
+  assert.ok(!book.includes('noindex'));
+  assert.ok(!book.includes('location.replace'), 'no longer a redirect');
+  assert.ok(book.includes('<a class="brand" href="../">'), 'logo links home');
+});
+
+test('the form has four screens under three steps; only the first is visible before the script runs', () => {
+  const panels = [...book.matchAll(/<div class="step" data-step="(\d)" data-progress="(\d)"[^>]*>/g)];
+  assert.deepEqual(panels.map((m) => m[1]), ['1', '2', '3', '4']);
+  // Services and its optional-details screen are both step 1 on the progress line.
+  assert.deepEqual(panels.map((m) => m[2]), ['1', '1', '2', '3']);
+  assert.deepEqual(panels.map((m) => /\shidden/.test(m[0])), [false, true, true, true]);
+  assert.deepEqual([...book.matchAll(/data-step-label="(\d)"/g)].map((m) => m[1]), ['1', '2', '3']);
+  // Each field sits on the screen the design gives it.
+  const [services, details, when, contact] = book.split(/<div class="step" data-step="\d"/).slice(1);
+  assert.match(services, /name="service" value="Nails"/);
+  assert.doesNotMatch(services, /id="nail-services"/);
+  assert.match(details, /id="nail-services"/);
+  assert.match(details, /id="spa-services"/);
+  for (const name of ['technician', 'date', 'time']) assert.match(when, new RegExp(`name="${name}"`));
+  for (const name of ['name', 'phone', 'email', 'notes', 'botcheck']) assert.match(contact, new RegExp(`name="${name}"`));
+});
+
+test('Next and Back are plain buttons; only Send submits, and starts hidden', () => {
+  assert.match(book, /<button class="btn btn-back" type="button" data-back hidden>Back<\/button>/);
+  assert.match(book, /<button class="btn btn-primary" type="button" data-next>Next<\/button>/);
+  assert.match(book, /<button class="btn btn-primary" type="submit" data-send hidden>Send request<\/button>/);
+  assert.equal((book.match(/type="submit"/g) || []).length, 1);
+  assert.match(css, /\.step-bar \{[^}]*position: sticky;[^}]*bottom: 0/);
 });
