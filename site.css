@@ -178,6 +178,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .book-page h1 { font-size: clamp(28px, 6vw, 38px); }
 .book-intro { margin: 10px 0 0; color: #bdbdbd; font-size: 15px; }
 .book-intro a { color: #fff; }
+.book-intro .together { white-space: nowrap; }  /* "Prefer to call?" and the number stay on one line */
 .progress { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 22px 0 0; padding: 0; }
 .progress li { padding-top: 10px; border-top: 3px solid #3a3a3a; font-size: 13px; color: #9a9a9a; transition: border-color .25s, color .25s; }
 .progress li.done { border-color: var(--accent-dark); color: #d4d4d4; }
