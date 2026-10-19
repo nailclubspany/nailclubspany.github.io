@@ -22,7 +22,7 @@
 // buildBookingSubmission, timeSlots, weekdayOf, isPastDate, localISODate.
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.mjs';
 import { HORIZON_DAYS, salonToday, earliestStart, unknownServices, openSlots, formatMinutes, addDaysToIso } from './schedule.mjs';
-import { withTimeout, canOverwriteStatus, createGenerationalCache, resumeRefreshDue, isTestHost, phoneLooksValid } from './booking-support.mjs';
+import { withTimeout, canOverwriteStatus, createGenerationalCache, resumeRefreshDue, isTestHost, phoneLooksValid, legacyPickForLive } from './booking-support.mjs';
 import { renderNailPicker, renderChoices, wireOptionSections, serviceSummary } from './nail-picker.mjs';
 import { SPA_SERVICES, pickedServiceNames, bookingNotes } from './services.mjs';
 import { inlineErrors, showError } from './inline-errors.mjs';
@@ -255,18 +255,58 @@ function enterLegacyMode() {
 
     if (f.botcheck.checked) return; // honeypot: only bots tick the hidden box
 
-    if (TEST_MODE) {
-      console.log('Test mode — not emailed:', buildBookingSubmission(data, WEB3FORMS_KEY));
-      form.reset();
-      fillTimes();
-      finish(`Test mode — not emailed: ${data.service} · ${data.date} ${data.time}`, rows);
-      return;
-    }
-
     const button = form.querySelector('button[type="submit"]');
     button.disabled = true;
     status.textContent = 'Sending your request…';
     try {
+      // Live booking is on but this page fell back to email-only (too slow to
+      // connect on load, or a later availability check failed): try saving it
+      // online once more, so a passing bad connection doesn't keep the request
+      // out of the staff app. Anything short of a reply goes on to email below.
+      const retry = await saveOnlineFromLegacy(data);
+      if (retry) {
+        const { reply, client, dayData, pick } = retry;
+        const emailData = { ...data, technician: data.technician || 'No preference' };
+        if (reply.ok) {
+          step(STEPS.heldAfterRetry);
+          form.reset();
+          fillTimes();
+          status.textContent = '';
+          finish(TEST_MODE ? `${SUCCESS_COPY} (Test mode — not emailed.)` : SUCCESS_COPY, rows);
+          emailSalon({ ...emailData, technician: reply.staff_name ?? 'No preference' }, true);
+          return;
+        }
+        if (reply.reason === 'too_many') {
+          step(STEPS.tooMany);
+          emailSalon(emailData, 'NOT saved online — this phone number already has 3 pending requests. Call the customer.');
+          status.textContent = TOO_MANY_COPY;
+          return;
+        }
+        if (reply.reason === 'slot_taken') {
+          step(STEPS.timeTaken);
+          emailSalon(emailData, 'NOT saved online — that time was just taken; the customer was shown the open times and may send another request.');
+          // The connection works now: switch to live mode so they pick from
+          // the real open times, keeping their provider.
+          supabase = client;
+          dayAvailability.set(data.date, dayData);
+          technicianSelect.replaceChildren(new Option(data.technician || 'No preference', pick.staffId == null ? '' : String(pick.staffId)));
+          enterLiveMode();
+          steps.go(TIME_SCREEN);
+          status.textContent = TAKEN_COPY;
+          return;
+        }
+        // 'invalid' or unrecognized: email it the old way, below.
+      }
+
+      if (TEST_MODE) {
+        console.log('Test mode — not emailed:', buildBookingSubmission(data, WEB3FORMS_KEY));
+        form.reset();
+        fillTimes();
+        status.textContent = '';
+        finish(`Test mode — not emailed: ${data.service} · ${data.date} ${data.time}`, rows);
+        return;
+      }
+
       const res = await fetch('https://api.web3forms.com/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -577,24 +617,67 @@ function enterLiveMode() {
   refresh();
 }
 
+const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
+// supabase-js's createClient once an import of it has finished — even one
+// that finished after its timeout.
+let createClientLoaded = null;
+
+// Loads supabase-js and fetches one day's availability, each step
+// timeout-guarded. Rejects on any failure, a hang included. `fresh`: a
+// browser remembers a failed module download and won't fetch the same URL
+// again, so a retry that still has no library asks for it under a new URL.
+async function connectForDay(day, { fresh = false } = {}) {
+  let createClient = createClientLoaded;
+  if (!createClient) {
+    const loading = import(fresh ? `${SUPABASE_JS}?retry=${Date.now()}` : SUPABASE_JS);
+    loading.then((m) => { createClientLoaded ??= m.createClient; }, () => {});
+    ({ createClient } = await withTimeout(loading, CONNECT_TIMEOUT_MS, 'supabase-js load timed out'));
+  }
+  const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { data, error } = await withTimeout(
+    client.rpc('public_day', { p_day: day }),
+    CONNECT_TIMEOUT_MS,
+    'public_day timed out'
+  );
+  if (error) throw error;
+  return { client, dayData: data };
+}
+
+// A Send made while the page is in legacy mode with live booking configured:
+// reconnect and try request_appointment. Resolves to { reply, client,
+// dayData, pick } when the booking system answered, or null when it can't be
+// reached or the picks can't be booked online — the caller then emails it.
+async function saveOnlineFromLegacy(data) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  try {
+    const { client, dayData } = await connectForDay(data.date, { fresh: true });
+    const summary = serviceSummary(form);
+    const pick = legacyPickForLive(dayData.staff, data.technician, data.time);
+    if (!pick || unknownServices(dayData, summary.names).length) return null;
+    const { data: reply, error } = await client.rpc('request_appointment', {
+      p_name: data.name,
+      p_phone: data.phone,
+      p_email: data.email,
+      p_services: summary.names,
+      p_staff_id: pick.staffId,
+      p_day: data.date,
+      p_start_min: pick.startMin,
+      p_notes: bookingNotes(summary.pickDetailLines, data.notes),
+    });
+    if (error || !reply) return null;
+    return { reply, client, dayData, pick };
+  } catch {
+    return null;
+  }
+}
+
 async function tryEnterLiveMode() {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
   try {
-    const { createClient } = await withTimeout(
-      import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm'),
-      CONNECT_TIMEOUT_MS,
-      'supabase-js load timed out'
-    );
-    const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const today = salonToday(new Date());
-    const { data, error } = await withTimeout(
-      client.rpc('public_day', { p_day: today }),
-      CONNECT_TIMEOUT_MS,
-      'public_day timed out'
-    );
-    if (error) throw error;
+    const { client, dayData } = await connectForDay(today);
     supabase = client;
-    dayAvailability.set(today, data);
+    dayAvailability.set(today, dayData);
     enterLiveMode();
   } catch {
     // A hang counts the same as an error here (withTimeout turns it into

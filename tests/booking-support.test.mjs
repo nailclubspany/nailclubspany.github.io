@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { withTimeout, canOverwriteStatus, createGenerationalCache, resumeRefreshDue, isTestHost, phoneLooksValid } from '../js/booking-support.mjs';
+import { withTimeout, canOverwriteStatus, createGenerationalCache, resumeRefreshDue, isTestHost, phoneLooksValid, legacyPickForLive } from '../js/booking-support.mjs';
 
 // A promise plus its resolve/reject, for sequencing concurrent fetches deterministically.
 function deferred() {
@@ -168,4 +168,20 @@ test('phoneLooksValid needs at least 10 digits, like request_appointment', () =>
   for (const p of ['1324', '555-0100', '', '   ']) {
     assert.equal(phoneLooksValid(p), false, p);
   }
+});
+
+// --- legacyPickForLive ------------------------------------------------------
+
+const STAFF = [{ id: 1, name: 'Yoyo' }, { id: 4, name: 'Mia' }];
+
+test('legacyPickForLive turns an email-only form pick into request_appointment args', () => {
+  assert.deepEqual(legacyPickForLive(STAFF, 'Mia', '4:45 PM'), { staffId: 4, startMin: 16 * 60 + 45 });
+  assert.deepEqual(legacyPickForLive(STAFF, '', '10:00 AM'), { staffId: null, startMin: 600 });
+  assert.deepEqual(legacyPickForLive(STAFF, 'Yoyo', '12:15 PM'), { staffId: 1, startMin: 12 * 60 + 15 });
+});
+
+test('legacyPickForLive returns null when the provider or time cannot be matched', () => {
+  assert.equal(legacyPickForLive(STAFF, 'Carmela', '4:45 PM'), null); // not on the live staff list
+  assert.equal(legacyPickForLive(STAFF, 'Mia', ''), null);
+  assert.equal(legacyPickForLive(STAFF, 'Mia', 'soon'), null);
 });

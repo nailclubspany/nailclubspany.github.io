@@ -28,6 +28,7 @@ export const STEPS = {
   sendTapped: 'book-3-send-tapped',
   // Outcomes of a Send that passed the form's checks.
   held: 'book-4-held', // saved online
+  heldAfterRetry: 'book-4-held-after-retry', // saved online by the retry at Send, after the page had fallen back to email-only
   timeTaken: 'book-4-time-taken',
   tooMany: 'book-4-too-many',
   emailedNotSaved: 'book-4-emailed-not-saved', // booking system failed, email got through

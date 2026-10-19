@@ -122,3 +122,17 @@ export function isTestHost(hostname) {
 export function phoneLooksValid(phone) {
   return phone.replace(/\D/g, '').length >= 10;
 }
+
+// The email-only form's picks — a provider *name* from its static list
+// ('' = No preference) and a time label like '4:45 PM' — as
+// request_appointment's staff id and start minute, so a Send made in that
+// mode can still be saved online. null when the provider isn't on the live
+// staff list or the time can't be read.
+export function legacyPickForLive(staff, technicianName, timeLabel) {
+  const m = /^(\d{1,2}):(\d{2}) (AM|PM)$/.exec(timeLabel);
+  if (!m) return null;
+  const startMin = (Number(m[1]) % 12 + (m[3] === 'PM' ? 12 : 0)) * 60 + Number(m[2]);
+  if (!technicianName) return { staffId: null, startMin };
+  const match = staff.find((s) => s.name === technicianName);
+  return match ? { staffId: match.id, startMin } : null;
+}
